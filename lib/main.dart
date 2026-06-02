@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'pages/login_page.dart';
+import 'services/notification_service.dart';
 import 'services/session_guard.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
@@ -18,23 +19,30 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 Future<void> setupFirebaseMessaging() async {
   final messaging = FirebaseMessaging.instance;
 
-  final settings = await messaging.requestPermission(alert: true, badge: true, sound: true);
+  // iOS permission request; Android 13+ handled via NotificationService
+  await messaging.requestPermission(alert: true, badge: true, sound: true);
 
-  debugPrint('🔔 Notification permission: ${settings.authorizationStatus}');
+  // Ensure foreground notifications are shown as banners on iOS too
+  await messaging.setForegroundNotificationPresentationOptions(
+    alert: true,
+    badge: true,
+    sound: true,
+  );
 
   final token = await messaging.getToken();
   debugPrint('🔥 FCM TOKEN: $token');
 
+  // Foreground: FCM delivers to app but does NOT auto-show notification on Android
+  // We must display it manually via flutter_local_notifications
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    debugPrint('🔔 Foreground message received');
-    debugPrint('Title: ${message.notification?.title}');
-    debugPrint('Body: ${message.notification?.body}');
-    debugPrint('Data: ${message.data}');
+    debugPrint('🔔 Foreground message: ${message.messageId}');
+    final title = message.notification?.title ?? message.data['title'] ?? 'Notifikasi';
+    final body = message.notification?.body ?? message.data['body'] ?? '';
+    NotificationService.showNotification(title: title, body: body);
   });
 
   FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    debugPrint('🔔 Notification clicked');
-    debugPrint('Data: ${message.data}');
+    debugPrint('🔔 Notification tapped: ${message.data}');
   });
 }
 
@@ -44,6 +52,7 @@ Future<void> main() async {
   try {
     if (!kIsWeb) {
       await Firebase.initializeApp();
+      await NotificationService.initialize();
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
       await setupFirebaseMessaging();
     } else {
