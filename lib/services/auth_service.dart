@@ -59,6 +59,29 @@ class AuthService {
         jabatan: resolvedJabatan,
       );
 
+      final startSessionResult = await startSession(
+        bprId: resolvedBprId,
+        username: resolvedUserId,
+        noCif: resolvedNoCif,
+        deviceId: deviceId,
+        deviceName: 'Mobile Agent',
+        sessionToken: sessionToken,
+        roleUser: resolvedRoleUser,
+        jabatan: resolvedJabatan,
+      );
+
+      if (startSessionResult['success'] != true) {
+        await clearSession();
+
+        return LoginResponse(
+          code: startSessionResult['code']?.toString() ?? 'SESSION_ERROR',
+          status: 'error',
+          message: startSessionResult['message']?.toString() ?? 'Login berhasil, tetapi gagal memulai session.',
+          token: null,
+          user: null,
+        );
+      }
+
       try {
         final fcmToken = await getFcmToken();
 
@@ -292,5 +315,54 @@ class AuthService {
       'role_user': prefs.getString(_roleUserKey) ?? '',
       'jabatan': prefs.getString(_jabatanKey) ?? '',
     };
+  }
+
+  Future<Map<String, dynamic>> startSession({
+    required String bprId,
+    required String username,
+    required String noCif,
+    required String deviceId,
+    required String deviceName,
+    required String sessionToken,
+    required String roleUser,
+    required String jabatan,
+  }) async {
+    try {
+      final payload = {
+        'bpr_id': bprId,
+        'username': username.trim().toUpperCase(),
+        'no_cif': noCif.trim(),
+        'device_id': deviceId.trim(),
+        'device_name': deviceName.trim(),
+        'session_token': sessionToken.trim(),
+        'role_user': roleUser.trim(),
+        'jabatan': jabatan.trim(),
+      };
+
+      debugPrint('🚀 SESSION START URL: ${NetworkUrl.sessionStart()}');
+      debugPrint('🚀 SESSION START BODY: ${jsonEncode(payload)}');
+
+      final response = await http.post(
+        Uri.parse(NetworkUrl.sessionStart()),
+        headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
+        body: jsonEncode(payload),
+      );
+
+      debugPrint('🚀 SESSION START STATUS: ${response.statusCode}');
+      debugPrint('🚀 SESSION START RESPONSE: ${response.body}');
+
+      final jsonData = jsonDecode(response.body);
+
+      return {
+        'success': response.statusCode == 200 && jsonData['code']?.toString() == '000',
+        'code': jsonData['code']?.toString() ?? '',
+        'message': jsonData['message']?.toString() ?? '',
+        'data': jsonData['data'],
+      };
+    } catch (e) {
+      debugPrint('❌ startSession error: $e');
+
+      return {'success': false, 'code': 'EXCEPTION', 'message': 'Gagal memulai session: $e', 'data': null};
+    }
   }
 }

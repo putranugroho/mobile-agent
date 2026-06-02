@@ -52,17 +52,18 @@ class _SessionGuardState extends State<SessionGuard> with WidgetsBindingObserver
   void didChangeAppLifecycleState(AppLifecycleState state) {
     debugPrint('📱 AppLifecycleState: $state');
 
+    // Untuk Flutter Web, jangan logout/check session berdasarkan lifecycle.
+    // Web bisa memicu inactive/resumed saat DevTools aktif, tab berubah fokus, dll.
+    if (kIsWeb) {
+      debugPrint('🌐 Web lifecycle ignored for session: $state');
+      return;
+    }
+
     if (state == AppLifecycleState.resumed) {
       _checkSessionFromServer(extendSession: false);
       return;
     }
 
-    if (kIsWeb) {
-      debugPrint('🌐 Web lifecycle ignored for auto logout: $state');
-      return;
-    }
-
-    // Khusus APK/mobile native, background/closed tetap logout.
     if (state == AppLifecycleState.paused || state == AppLifecycleState.detached || state == AppLifecycleState.hidden) {
       _checkThenLogout(reason: 'App background / closed');
     }
@@ -133,8 +134,6 @@ class _SessionGuardState extends State<SessionGuard> with WidgetsBindingObserver
     if (!hasSession) return;
 
     try {
-      // Sesuai flow yang diminta:
-      // APK cek middleware session timeout dulu.
       await _authService.checkSessionTimeout(extendSession: false);
     } catch (e) {
       debugPrint('❌ Check before logout error: $e');

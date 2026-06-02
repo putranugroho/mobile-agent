@@ -82,16 +82,6 @@ class _DetailPermohonanPageState extends State<DetailPermohonanPage> {
               if (widget.data.alasan.isNotEmpty) _detailRow('Alasan', widget.data.alasan),
             ]),
             const SizedBox(height: 16),
-            const SizedBox(height: 16),
-
-            // Data Jaminan
-            _buildSectionTitle('Data Jaminan'),
-            const SizedBox(height: 6),
-            _buildInfoCard([
-              _detailRow('Jenis Jaminan', widget.notifier.getNamaJaminan(widget.data.kdJaminan)),
-              _buildFotoJaminan(), // ← Foto jaminan dalam satu baris
-            ]),
-            const SizedBox(height: 16),
 
             // Tanggal Keputusan
             _buildTanggalKeputusan(),

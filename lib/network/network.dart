@@ -22,6 +22,7 @@ class NetworkUrl {
   static String login() => '$baseAuthUrl/petugas/login';
   static String updateFcmToken() => '$baseUrl/mobile-agent/fcm-token/update';
   static String logout() => '$baseAuthUrl/petugas/logout';
+  static String sessionStart() => '$baseUrl/mobile-agent/session/start';
   static String sessionCheck() => '$baseUrl/mobile-agent/session/check';
   static String changePassword() => '$baseAuthUrl/petugas/change-password';
 
