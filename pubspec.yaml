@@ -70,6 +70,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/medfo_logo.jpeg
+    - assets/Logo_MTD_lurus.png
+    - assets/logo_medfo_agent.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

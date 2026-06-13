@@ -124,24 +124,9 @@ class _LoginPageState extends State<LoginPage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     // Logo
-                    Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.withOpacity(0.2),
-                            spreadRadius: 1,
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(16),
-                        child: Image.asset('assets/medfo_logo.jpeg', fit: BoxFit.cover),
-                      ),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset('assets/logo_medfo_agent.png', width: 80, height: 80, fit: BoxFit.cover),
                     ),
                     const SizedBox(height: 32),
 
@@ -249,9 +234,12 @@ class _LoginPageState extends State<LoginPage> {
             color: Colors.white,
             child: Column(
               children: [
-                Text('Versi 1.0.0', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                const SizedBox(height: 4),
-                Text('PT. Media Transaksi Digital', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                Text('Versi 1.0.1', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                const SizedBox(height: 6),
+                Image.asset(
+                  'assets/Logo_MTD_lurus.png',
+                  height: 30,
+                ),
               ],
             ),
           ),
