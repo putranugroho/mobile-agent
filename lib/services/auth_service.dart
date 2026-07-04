@@ -21,14 +21,34 @@ class AuthService {
 
   // ── LOGIN ──────────────────────────────────────────────────────────────────
   Future<LoginResponse> login({required String bprId, required String userId, required String password}) async {
+    final normalizedUserId = userId.trim().toUpperCase();
     final deviceId = await getOrCreateDeviceId();
+
+    // PRECHECK DEVICE BINDING DULU sebelum login lama.
+    // Tujuan: kalau user/device sudah tidak valid, jangan panggil /petugas/login
+    // supaya endpoint lama tidak sempat mengubah is_login.
+    final precheck = await precheckDeviceBinding(
+      bprId: bprId,
+      username: normalizedUserId,
+      deviceId: deviceId,
+    );
+
+    if (precheck['success'] != true) {
+      return LoginResponse(
+        code: precheck['code']?.toString() ?? '423',
+        status: 'error',
+        message: precheck['message']?.toString() ?? 'Perangkat tidak valid untuk login.',
+        token: null,
+        user: null,
+      );
+    }
 
     final response = await http.post(
       Uri.parse(NetworkUrl.login()),
       headers: NetworkUrl.jsonHeaders(),
       body: jsonEncode({
         'bpr_id': bprId,
-        'user_id': userId.toUpperCase(),
+        'user_id': normalizedUserId,
         'password': password,
         'device_id': deviceId,
         'device_name': 'Mobile Agent',
@@ -38,9 +58,9 @@ class AuthService {
     final result = LoginResponse.fromJson(jsonDecode(response.body));
 
     if (result.isSuccess && result.token != null) {
-      final resolvedUserId = result.user?.userId ?? userId.toUpperCase();
+      final resolvedUserId = result.user?.userId ?? normalizedUserId;
       final resolvedNoCif = result.user?.noCif ?? resolvedUserId;
-      final resolvedNama = result.user?.nama ?? userId.toUpperCase();
+      final resolvedNama = result.user?.nama ?? normalizedUserId;
       final resolvedBprId = result.user?.bprId ?? bprId;
       final resolvedRoleUser = result.user?.roleUser ?? '';
       final resolvedJabatan = result.user?.jabatan ?? '';
@@ -71,6 +91,9 @@ class AuthService {
       );
 
       if (startSessionResult['success'] != true) {
+        // Karena login lama sudah sempat berhasil, panggil logout lama diam-diam
+        // agar status session lama tidak menggantung jika startSession gagal.
+        await logoutLegacySilently(bprId: resolvedBprId, userId: resolvedUserId);
         await clearSession();
 
         return LoginResponse(
@@ -101,6 +124,47 @@ class AuthService {
     }
 
     return result;
+  }
+
+  Future<Map<String, dynamic>> precheckDeviceBinding({
+    required String bprId,
+    required String username,
+    required String deviceId,
+  }) async {
+    try {
+      final payload = {
+        'bpr_id': bprId.trim(),
+        'username': username.trim().toUpperCase(),
+        'device_id': deviceId.trim(),
+      };
+
+      debugPrint('🔐 SESSION PRECHECK URL: ${NetworkUrl.sessionPrecheck()}');
+      debugPrint('🔐 SESSION PRECHECK BODY: ${jsonEncode(payload)}');
+
+      final response = await http.post(
+        Uri.parse(NetworkUrl.sessionPrecheck()),
+        headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
+        body: jsonEncode(payload),
+      );
+
+      debugPrint('🔐 SESSION PRECHECK STATUS: ${response.statusCode}');
+      debugPrint('🔐 SESSION PRECHECK RESPONSE: ${response.body}');
+
+      if (response.statusCode != 200) {
+        return {'success': false, 'code': 'HTTP_${response.statusCode}', 'message': 'Gagal mengecek perangkat. HTTP ${response.statusCode}', 'data': null};
+      }
+
+      final jsonData = jsonDecode(response.body);
+      return {
+        'success': jsonData['code']?.toString() == '000',
+        'code': jsonData['code']?.toString() ?? '',
+        'message': jsonData['message']?.toString() ?? '',
+        'data': jsonData['data'],
+      };
+    } catch (e) {
+      debugPrint('❌ precheckDeviceBinding error: $e');
+      return {'success': false, 'code': 'EXCEPTION', 'message': 'Gagal mengecek perangkat: $e', 'data': null};
+    }
   }
 
   Future<String> getFcmToken() async {
@@ -181,6 +245,17 @@ class AuthService {
     } catch (_) {
       await clearSession();
       return const AuthResponse(code: '000', status: 'success', message: 'Logout berhasil');
+    }
+  }
+
+  Future<void> logoutLegacySilently({required String bprId, required String userId}) async {
+    try {
+      await TokenInterceptor.post(
+        Uri.parse(NetworkUrl.logout()),
+        body: jsonEncode({'bpr_id': bprId, 'user_id': userId}),
+      );
+    } catch (e) {
+      debugPrint('⚠️ logoutLegacySilently gagal: $e');
     }
   }
 
