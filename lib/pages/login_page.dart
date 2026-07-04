@@ -139,7 +139,7 @@ class _LoginPageState extends State<LoginPage> {
                       'Silakan login untuk melanjutkan',
                       style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
                     ),
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 20),
 
                     // Form Card
                     Container(
@@ -184,7 +184,7 @@ class _LoginPageState extends State<LoginPage> {
                             style: const TextStyle(fontSize: 14),
                             onSubmitted: (_) => _login(),
                           ),
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
 
                           // Tombol Login
                           SizedBox(
@@ -213,14 +213,13 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
 
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 10),
                     Center(
                       child: TextButton(
                         onPressed: _showLupaSandiDialog,
                         child: Text('Lupa Sandi ?', style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                       ),
                     ),
-                    const SizedBox(height: 40),
                   ],
                 ),
               ),
@@ -235,11 +234,11 @@ class _LoginPageState extends State<LoginPage> {
             child: Column(
               children: [
                 Text('Versi 1.0.1', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                const SizedBox(height: 6),
                 Image.asset(
                   'assets/Logo_MTD_lurus.png',
                   height: 30,
                 ),
+                const SizedBox(height: 35),
               ],
             ),
           ),

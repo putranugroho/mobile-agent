@@ -18,14 +18,17 @@ class SessionGuard extends StatefulWidget {
 
 class _SessionGuardState extends State<SessionGuard> with WidgetsBindingObserver {
   static const Duration _idleDuration = Duration(minutes: 5);
+  static const Duration _backgroundTimeoutDuration = Duration(minutes: 2);
   static const Duration _activityTouchInterval = Duration(seconds: 60);
 
   final AuthService _authService = AuthService();
 
   Timer? _idleTimer;
+  Timer? _backgroundTimer;   // ← timer 3 menit saat app di background
   bool _isLoggingOut = false;
   bool _isCheckingSession = false;
   DateTime? _lastServerTouchAt;
+  DateTime? _backgroundedAt;  // ← kapan app masuk background
 
   @override
   void initState() {
@@ -45,6 +48,7 @@ class _SessionGuardState extends State<SessionGuard> with WidgetsBindingObserver
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _idleTimer?.cancel();
+    _backgroundTimer?.cancel();
     super.dispose();
   }
 
@@ -52,20 +56,49 @@ class _SessionGuardState extends State<SessionGuard> with WidgetsBindingObserver
   void didChangeAppLifecycleState(AppLifecycleState state) {
     debugPrint('📱 AppLifecycleState: $state');
 
-    // Untuk Flutter Web, jangan logout/check session berdasarkan lifecycle.
-    // Web bisa memicu inactive/resumed saat DevTools aktif, tab berubah fokus, dll.
     if (kIsWeb) {
       debugPrint('🌐 Web lifecycle ignored for session: $state');
       return;
     }
 
     if (state == AppLifecycleState.resumed) {
+      // App kembali ke foreground — batalkan timer background
+      _backgroundTimer?.cancel();
+      _backgroundTimer = null;
+
+      if (_backgroundedAt != null) {
+        final elapsed = DateTime.now().difference(_backgroundedAt!);
+        debugPrint('⏱ App resumed setelah ${elapsed.inSeconds}s di background');
+        _backgroundedAt = null;
+
+        // Kalau sudah > 3 menit saat resumed (race condition), langsung logout
+        if (elapsed >= _backgroundTimeoutDuration) {
+          debugPrint('🔒 Background terlalu lama (${elapsed.inMinutes}m), logout');
+          _checkThenLogout(reason: 'Background lebih dari 3 menit');
+          return;
+        }
+      }
+
       _checkSessionFromServer(extendSession: false);
       return;
     }
 
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached || state == AppLifecycleState.hidden) {
-      _checkThenLogout(reason: 'App background / closed');
+    // App masuk background (home button ditekan, dll.)
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      _backgroundedAt = DateTime.now();
+      debugPrint('🏠 App di background, mulai timer ${_backgroundTimeoutDuration.inMinutes} menit');
+
+      _backgroundTimer?.cancel();
+      _backgroundTimer = Timer(_backgroundTimeoutDuration, () {
+        debugPrint('⏰ Timer background ${_backgroundTimeoutDuration.inMinutes} menit habis → logout');
+        _checkThenLogout(reason: 'Background lebih dari ${_backgroundTimeoutDuration.inMinutes} menit');
+      });
+    }
+
+    // App benar-benar ditutup (swipe kill) → langsung logout
+    if (state == AppLifecycleState.detached) {
+      _backgroundTimer?.cancel();
+      _checkThenLogout(reason: 'App closed / detached');
     }
   }
 
@@ -92,8 +125,6 @@ class _SessionGuardState extends State<SessionGuard> with WidgetsBindingObserver
 
     final now = DateTime.now();
 
-    // Jangan hit server setiap tap.
-    // Cukup maksimal 1x per 60 detik saat user aktif.
     if (_lastServerTouchAt == null || now.difference(_lastServerTouchAt!) >= _activityTouchInterval) {
       _lastServerTouchAt = now;
 
@@ -156,17 +187,14 @@ class _SessionGuardState extends State<SessionGuard> with WidgetsBindingObserver
         await _authService.clearSession();
       } else {
         debugPrint('🔒 Logout triggered: $reason');
-
-        // Hit endpoint logout existing dari Network/AuthService.
         await _authService.logoutCurrentSession();
       }
     } catch (e) {
       debugPrint('❌ Logout error: $e');
-
-      // Walaupun endpoint logout gagal, session lokal tetap wajib dibersihkan.
       await _authService.clearSession();
     } finally {
       _idleTimer?.cancel();
+      _backgroundTimer?.cancel();
       _isLoggingOut = false;
 
       final navigator = widget.navigatorKey.currentState;

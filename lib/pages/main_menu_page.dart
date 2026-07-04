@@ -1,11 +1,13 @@
 // lib/pages/main_menu_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../repositories/permohonan_pinjaman_repository.dart';
 import '../network/network.dart';
 import 'daftar_permohonan_page.dart';
 import 'permohonan_histori_page.dart';
 import 'profile_page.dart';
 import 'login_page.dart';
+import '../services/auth_service.dart';
 
 class MainMenuPage extends StatefulWidget {
   final String userName;
@@ -25,6 +27,7 @@ class MainMenuPage extends StatefulWidget {
 
 class _MainMenuPageState extends State<MainMenuPage> {
   int _selectedIndex = 0;
+  DateTime? _lastBackPressed;        // ← waktu pertama kali back ditekan
 
   late final List<Widget> _pages;
 
@@ -44,40 +47,92 @@ class _MainMenuPageState extends State<MainMenuPage> {
     ];
   }
 
+  /// Dipanggil oleh PopScope saat back ditekan.
+  /// Return true = biarkan sistem handle (keluar app), false = kita handle sendiri.
+  Future<bool> _onWillPop() async {
+    final now = DateTime.now();
+
+    final isFirstPress =
+        _lastBackPressed == null ||
+        now.difference(_lastBackPressed!) > const Duration(seconds: 2);
+
+    if (isFirstPress) {
+      // Pertama kali → tampilkan snackbar, jangan keluar
+      _lastBackPressed = now;
+      if (mounted) {
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Tekan sekali lagi untuk keluar'),
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            backgroundColor: const Color(0xff0F3D2E),
+          ),
+        );
+      }
+      return false; // jangan keluar dulu
+    }
+
+    // Kedua kali dalam 2 detik → logout lalu exit
+    await _logoutAndExit();
+    return false; // kita yang handle via SystemNavigator
+  }
+
+  Future<void> _logoutAndExit() async {
+    try {
+      final authService = AuthService();
+      await authService.logoutCurrentSession();
+    } catch (e) {
+      debugPrint('❌ Logout on exit error: $e');
+    }
+    // Tutup aplikasi
+    SystemNavigator.pop();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: _pages[_selectedIndex],
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: const Color(0xff0F3D2E),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              spreadRadius: 1,
-              blurRadius: 4,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: (index) => setState(() => _selectedIndex = index),
-          selectedItemColor: Colors.white,
-          unselectedItemColor: Colors.grey,
-          type: BottomNavigationBarType.fixed,
-          backgroundColor: const Color(0xff0F3D2E),
-          elevation: 0,
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Menu Utama',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.person),
-              label: 'Profil',
-            ),
-          ],
+    return PopScope(
+      // canPop: false → kita intercept semua back gesture
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return; // sudah di-pop sistem, skip
+        await _onWillPop();
+      },
+      child: Scaffold(
+        body: _pages[_selectedIndex],
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xff0F3D2E),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 4,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: (index) => setState(() => _selectedIndex = index),
+            selectedItemColor: Colors.white,
+            unselectedItemColor: Colors.grey,
+            type: BottomNavigationBarType.fixed,
+            backgroundColor: const Color(0xff0F3D2E),
+            elevation: 0,
+            items: const [
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home),
+                label: 'Menu Utama',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.person),
+                label: 'Profil',
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -127,7 +182,6 @@ class _MainMenuContentState extends State<MainMenuContent> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Logo kiri (medfo) — dari asset
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
               child: Image.asset(
@@ -137,8 +191,6 @@ class _MainMenuContentState extends State<MainMenuContent> {
                 fit: BoxFit.cover,
               ),
             ),
-
-            // Logo kanan (BPR) — dari API
             ClipRRect(
               borderRadius: BorderRadius.circular(8),
               child: SizedBox(
