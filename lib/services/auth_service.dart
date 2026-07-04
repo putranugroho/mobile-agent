@@ -1,6 +1,5 @@
 // lib/services/auth_service.dart
 import 'dart:convert';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -127,8 +126,7 @@ class AuthService {
       return existing;
     }
 
-    final random = Random.secure().nextInt(999999999).toString().padLeft(9, '0');
-    final newDeviceId = 'mobile-agent-${DateTime.now().microsecondsSinceEpoch}-$random';
+    final newDeviceId = 'MA-${DateTime.now().millisecondsSinceEpoch}';
     await prefs.setString(key, newDeviceId);
 
     return newDeviceId;
@@ -165,28 +163,25 @@ class AuthService {
 
   // ── LOGOUT ─────────────────────────────────────────────────────────────────
   Future<AuthResponse> logout({required String bprId, required String userId}) async {
-    AuthResponse result = const AuthResponse(code: '000', status: 'success', message: 'Logout berhasil');
-
-    // Logout session di medfo-go agar is_login menjadi N, tetapi device binding tetap disimpan.
+    // Tambahan: logout session di medfo-go agar is_login menjadi N,
+    // tetapi device binding tetap disimpan di backend.
+    // Flow logout lama di bawah tetap dipertahankan.
     try {
-      result = await logoutAgentSession();
+      await logoutAgentSession();
     } catch (e) {
       debugPrint('⚠️ logoutAgentSession gagal: $e');
     }
 
-    // Tetap panggil endpoint logout lama untuk menjaga kompatibilitas flow web-service.
     try {
-      final response = await TokenInterceptor.post(
-        Uri.parse(NetworkUrl.logout()),
-        body: jsonEncode({'bpr_id': bprId, 'user_id': userId}),
-      );
-      result = AuthResponse.fromJson(jsonDecode(response.body));
-    } catch (e) {
-      debugPrint('⚠️ logout petugas lama gagal: $e');
-    }
+      final response = await TokenInterceptor.post(Uri.parse(NetworkUrl.logout()), body: jsonEncode({'bpr_id': bprId, 'user_id': userId}));
 
-    await clearSession();
-    return result;
+      final result = AuthResponse.fromJson(jsonDecode(response.body));
+      await clearSession();
+      return result;
+    } catch (_) {
+      await clearSession();
+      return const AuthResponse(code: '000', status: 'success', message: 'Logout berhasil');
+    }
   }
 
   Future<AuthResponse> logoutAgentSession() async {
