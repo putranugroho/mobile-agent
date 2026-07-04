@@ -24,6 +24,7 @@ class NetworkUrl {
   static String logout() => '$baseAuthUrl/petugas/logout';
   static String sessionStart() => '$baseUrl/mobile-agent/session/start';
   static String sessionCheck() => '$baseUrl/mobile-agent/session/check';
+  static String sessionLogout() => '$baseUrl/mobile-agent/session/logout';
   static String changePassword() => '$baseAuthUrl/petugas/change-password';
 
   // Endpoints

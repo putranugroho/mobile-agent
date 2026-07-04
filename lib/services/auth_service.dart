@@ -1,5 +1,6 @@
 // lib/services/auth_service.dart
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -86,7 +87,14 @@ class AuthService {
         final fcmToken = await getFcmToken();
 
         if (fcmToken.isNotEmpty) {
-          await updateFcmToken(bprId: bprId, noCif: resolvedUserId, username: resolvedUserId, fcmToken: fcmToken);
+          await updateFcmToken(
+            bprId: resolvedBprId,
+            noCif: resolvedNoCif,
+            username: resolvedUserId,
+            fcmToken: fcmToken,
+            deviceId: deviceId,
+            sessionToken: sessionToken,
+          );
         }
       } catch (_) {
         // Login tetap sukses walaupun update FCM token gagal.
@@ -119,14 +127,29 @@ class AuthService {
       return existing;
     }
 
-    final newDeviceId = 'MA-${DateTime.now().millisecondsSinceEpoch}';
+    final random = Random.secure().nextInt(999999999).toString().padLeft(9, '0');
+    final newDeviceId = 'mobile-agent-${DateTime.now().microsecondsSinceEpoch}-$random';
     await prefs.setString(key, newDeviceId);
 
     return newDeviceId;
   }
 
-  Future<AuthResponse> updateFcmToken({required String bprId, required String noCif, required String username, required String fcmToken}) async {
-    final payload = {'bpr_id': bprId, 'no_cif': noCif.trim(), 'username': username.trim().toUpperCase(), 'fcm_token': fcmToken.trim()};
+  Future<AuthResponse> updateFcmToken({
+    required String bprId,
+    required String noCif,
+    required String username,
+    required String fcmToken,
+    String? deviceId,
+    String? sessionToken,
+  }) async {
+    final payload = {
+      'bpr_id': bprId,
+      'no_cif': noCif.trim(),
+      'username': username.trim().toUpperCase(),
+      'fcm_token': fcmToken.trim(),
+      if ((deviceId ?? '').trim().isNotEmpty) 'device_id': deviceId!.trim(),
+      if ((sessionToken ?? '').trim().isNotEmpty) 'session_token': sessionToken!.trim(),
+    };
 
     debugPrint('🔥 UPDATE FCM URL: ${NetworkUrl.updateFcmToken()}');
     debugPrint('🔥 UPDATE FCM PAYLOAD: ${jsonEncode(payload)}');
@@ -142,16 +165,54 @@ class AuthService {
 
   // ── LOGOUT ─────────────────────────────────────────────────────────────────
   Future<AuthResponse> logout({required String bprId, required String userId}) async {
-    try {
-      final response = await TokenInterceptor.post(Uri.parse(NetworkUrl.logout()), body: jsonEncode({'bpr_id': bprId, 'user_id': userId}));
+    AuthResponse result = const AuthResponse(code: '000', status: 'success', message: 'Logout berhasil');
 
-      final result = AuthResponse.fromJson(jsonDecode(response.body));
-      await clearSession();
-      return result;
-    } catch (_) {
-      await clearSession();
-      return const AuthResponse(code: '000', status: 'success', message: 'Logout berhasil');
+    // Logout session di medfo-go agar is_login menjadi N, tetapi device binding tetap disimpan.
+    try {
+      result = await logoutAgentSession();
+    } catch (e) {
+      debugPrint('⚠️ logoutAgentSession gagal: $e');
     }
+
+    // Tetap panggil endpoint logout lama untuk menjaga kompatibilitas flow web-service.
+    try {
+      final response = await TokenInterceptor.post(
+        Uri.parse(NetworkUrl.logout()),
+        body: jsonEncode({'bpr_id': bprId, 'user_id': userId}),
+      );
+      result = AuthResponse.fromJson(jsonDecode(response.body));
+    } catch (e) {
+      debugPrint('⚠️ logout petugas lama gagal: $e');
+    }
+
+    await clearSession();
+    return result;
+  }
+
+  Future<AuthResponse> logoutAgentSession() async {
+    final session = await getSessionData();
+
+    final payload = {
+      'bpr_id': session['bpr_id'] ?? '',
+      'username': (session['user_id'] ?? '').toString().toUpperCase(),
+      'no_cif': session['no_cif'] ?? '',
+      'device_id': session['device_id'] ?? '',
+      'session_token': session['session_token'] ?? '',
+    };
+
+    debugPrint('🚪 SESSION LOGOUT URL: ${NetworkUrl.sessionLogout()}');
+    debugPrint('🚪 SESSION LOGOUT BODY: ${jsonEncode(payload)}');
+
+    final response = await http.post(
+      Uri.parse(NetworkUrl.sessionLogout()),
+      headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
+      body: jsonEncode(payload),
+    );
+
+    debugPrint('🚪 SESSION LOGOUT STATUS: ${response.statusCode}');
+    debugPrint('🚪 SESSION LOGOUT RESPONSE: ${response.body}');
+
+    return AuthResponse.fromJson(jsonDecode(response.body));
   }
 
   Future<Map<String, dynamic>> checkSessionTimeout({bool extendSession = false}) async {
