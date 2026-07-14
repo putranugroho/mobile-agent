@@ -72,6 +72,12 @@ class AuthResponse {
   bool get isSuccess => code == '000';
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
-    return AuthResponse(code: json['code'] ?? '', status: json['status'] ?? '', message: json['message'] ?? '');
+    final rawStatus = json['status'];
+
+    return AuthResponse(
+      code: json['code']?.toString() ?? '',
+      status: rawStatus is bool ? (rawStatus ? 'success' : 'error') : rawStatus?.toString() ?? '',
+      message: json['message']?.toString() ?? '',
+    );
   }
 }
