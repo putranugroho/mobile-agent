@@ -38,7 +38,15 @@ class PengajuanRepository {
 
   Future<String> _getBprId() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('bpr_id') ?? '609999';
+    final bprId = prefs.getString('bpr_id')?.trim() ?? '';
+
+    if (bprId.isEmpty) {
+      throw StateError(
+        'BPR ID tidak ditemukan pada session. Silakan login kembali.',
+      );
+    }
+
+    return bprId;
   }
 
   Future<List<PengajuanModel>> _getAllPengajuan() async {

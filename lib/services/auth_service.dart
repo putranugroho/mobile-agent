@@ -21,14 +21,36 @@ class AuthService {
 
   // ── LOGIN ──────────────────────────────────────────────────────────────────
   Future<LoginResponse> login({required String bprId, required String userId, required String password}) async {
+    final normalizedBprId = bprId.trim();
     final normalizedUserId = userId.trim().toUpperCase();
+
+    if (normalizedBprId.isEmpty) {
+      return const LoginResponse(
+        code: '001',
+        status: 'error',
+        message: 'BPR ID wajib diisi.',
+        token: null,
+        user: null,
+      );
+    }
+
+    if (normalizedUserId.isEmpty) {
+      return const LoginResponse(
+        code: '001',
+        status: 'error',
+        message: 'User ID wajib diisi.',
+        token: null,
+        user: null,
+      );
+    }
+
     final deviceId = await getOrCreateDeviceId();
 
     // PRECHECK DEVICE BINDING DULU sebelum login lama.
     // Tujuan: kalau user/device sudah tidak valid, jangan panggil /petugas/login
     // supaya endpoint lama tidak sempat mengubah is_login.
     final precheck = await precheckDeviceBinding(
-      bprId: bprId,
+      bprId: normalizedBprId,
       username: normalizedUserId,
       deviceId: deviceId,
     );
@@ -43,11 +65,26 @@ class AuthService {
       );
     }
 
+    final precheckData = precheck['data'];
+    final precheckBprId = precheckData is Map
+        ? precheckData['bpr_id']?.toString().trim() ?? ''
+        : '';
+
+    if (precheckBprId.isNotEmpty && precheckBprId != normalizedBprId) {
+      return const LoginResponse(
+        code: '409',
+        status: 'error',
+        message: 'BPR ID pada hasil precheck tidak sesuai dengan BPR ID login.',
+        token: null,
+        user: null,
+      );
+    }
+
     final response = await http.post(
       Uri.parse(NetworkUrl.login()),
       headers: NetworkUrl.jsonHeaders(),
       body: jsonEncode({
-        'bpr_id': bprId,
+        'bpr_id': normalizedBprId,
         'user_id': normalizedUserId,
         'password': password,
         'device_id': deviceId,
@@ -61,7 +98,8 @@ class AuthService {
       final resolvedUserId = result.user?.userId ?? normalizedUserId;
       final resolvedNoCif = result.user?.noCif ?? resolvedUserId;
       final resolvedNama = result.user?.nama ?? normalizedUserId;
-      final resolvedBprId = result.user?.bprId ?? bprId;
+      final responseBprId = result.user?.bprId.trim() ?? '';
+      final resolvedBprId = responseBprId.isNotEmpty ? responseBprId : normalizedBprId;
       final resolvedRoleUser = result.user?.roleUser ?? '';
       final resolvedJabatan = result.user?.jabatan ?? '';
 
@@ -132,10 +170,26 @@ class AuthService {
     required String deviceId,
   }) async {
     try {
+      final normalizedBprId = bprId.trim();
+      final normalizedUsername = username.trim().toUpperCase();
+      final normalizedDeviceId = deviceId.trim();
+
+      if (normalizedBprId.isEmpty) {
+        return {
+          'success': false,
+          'code': '001',
+          'message': 'BPR ID wajib diisi.',
+          'data': {
+            'allowed': false,
+            'reason': 'BPR_ID_REQUIRED',
+          },
+        };
+      }
+
       final payload = {
-        'bpr_id': bprId.trim(),
-        'username': username.trim().toUpperCase(),
-        'device_id': deviceId.trim(),
+        'bpr_id': normalizedBprId,
+        'username': normalizedUsername,
+        'device_id': normalizedDeviceId,
       };
 
       debugPrint('🔐 SESSION PRECHECK URL: ${NetworkUrl.sessionPrecheck()}');
@@ -320,7 +374,12 @@ class AuthService {
 
       final response = await http.post(
         Uri.parse(NetworkUrl.sessionCheck()),
-        headers: {'Content-Type': 'application/json', 'api-key': '123'},
+        headers: {
+          'Content-Type': 'application/json',
+          'api-key': NetworkUrl.apiKey,
+          'X-API-Key': NetworkUrl.apiKey,
+          'API-Key': NetworkUrl.apiKey,
+        },
         body: jsonEncode(payload),
       );
 
@@ -459,8 +518,21 @@ class AuthService {
     required String jabatan,
   }) async {
     try {
+      final normalizedBprId = bprId.trim();
+
+      if (normalizedBprId.isEmpty) {
+        return {
+          'success': false,
+          'code': '001',
+          'message': 'BPR ID wajib diisi untuk memulai session.',
+          'data': {
+            'reason': 'BPR_ID_REQUIRED',
+          },
+        };
+      }
+
       final payload = {
-        'bpr_id': bprId,
+        'bpr_id': normalizedBprId,
         'username': username.trim().toUpperCase(),
         'no_cif': noCif.trim(),
         'device_id': deviceId.trim(),

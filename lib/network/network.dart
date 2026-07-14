@@ -35,7 +35,7 @@ class NetworkUrl {
   static String getJaminanAll() => '$baseUrl/inquiry/jaminan-all';
 
   // BPR Profile
-  static String getBprProfile() => '$baseCmsIp/bpr_profile';
+  static String getBprProfile() => '$baseCmsUrl/bpr_profile';
 
   // Photo viewer
   static String getLogoBpr(String file) => '$baseCmsUrl/photo/view?type=logo_bpr&file=$file';
