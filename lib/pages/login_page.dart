@@ -233,7 +233,7 @@ class _LoginPageState extends State<LoginPage> {
             color: Colors.white,
             child: Column(
               children: [
-                Text('Versi 1.0.1', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+                Text('Versi 1.0.2', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
                 Image.asset(
                   'assets/Logo_MTD_lurus.png',
                   height: 30,
