@@ -178,44 +178,67 @@ class _MainMenuContentState extends State<MainMenuContent> {
     return Scaffold(
       backgroundColor: const Color(0xffEAF3EE),
       appBar: AppBar(
-        toolbarHeight: 80,
+        toolbarHeight: 78,
         title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                'assets/logo_medfo_agent.png',
-                width: 50,
-                height: 50,
-                fit: BoxFit.cover,
+            // Zona 1: logo medfo, rapat ke pinggir kiri
+            Expanded(
+              flex: 1,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 2, top: 2, bottom: 2),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: SizedBox(
+                      width: 111, // rasio 3:2 dari tinggi 74 (toolbarHeight 78 - 2px atas - 2px bawah)
+                      height: 74,
+                      child: Image.asset(
+                        'assets/logo_medfo_agent.png',
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: SizedBox(
-                width: 50,
-                height: 50,
-                child: _logoBprUrl != null
-                    ? Image.network(
-                        _logoBprUrl!,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          );
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          print('=== IMAGE ERROR: $error');
-                          return _logoFallback();
-                        },
-                      )
-                    : _logoFallback(),
+            // Zona 2: zona aman kosong, tidak diisi apa-apa
+            const Expanded(flex: 1, child: SizedBox.shrink()),
+            // Zona 3: logo BPR, rapat ke pinggir kanan
+            Expanded(
+              flex: 1,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 2, top: 2, bottom: 2),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: 111, // rasio 3:2 dari tinggi 74
+                      height: 74,
+                      child: _logoBprUrl != null
+                          ? Image.network(
+                              _logoBprUrl!,
+                              fit: BoxFit.contain,
+                              loadingBuilder: (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return const Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                );
+                              },
+                              errorBuilder: (context, error, stackTrace) {
+                                print('=== IMAGE ERROR: $error');
+                                return _logoFallback();
+                              },
+                            )
+                          : _logoFallback(),
+                    ),
+                  ),
+                ),
               ),
             ),
           ],
