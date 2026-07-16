@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/bpr_profile_model.dart';
 import '../services/auth_service.dart';
 import '../services/bpr_service.dart';
+import '../widgets/brand_logo.dart';
 import 'main_menu_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -277,7 +278,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: BrandColors.canvas,
       body: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -288,24 +289,36 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: Image.asset('assets/logo_medfo_agent.png', width: 80, height: 80, fit: BoxFit.cover),
-                    ),
-                    const SizedBox(height: 32),
+                    const BrandLogo(size: 104, ringWidth: 3),
+                    const SizedBox(height: 28),
                     const Text(
                       'Selamat Datang',
-                      style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xff0F3D2E)),
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.bold,
+                        color: BrandColors.brand900,
+                        letterSpacing: 0.2,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Text('Silakan login untuk melanjutkan', style: TextStyle(fontSize: 13, color: Colors.grey.shade600)),
-                    const SizedBox(height: 20),
+                    Text(
+                      'Silakan login untuk melanjutkan',
+                      style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 28),
                     Container(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.all(22),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: BrandColors.border),
+                        boxShadow: [
+                          BoxShadow(
+                            color: BrandColors.brand900.withOpacity(0.06),
+                            blurRadius: 30,
+                            offset: const Offset(0, 12),
+                          ),
+                        ],
                       ),
                       child: Column(
                         children: [
@@ -350,24 +363,41 @@ class _LoginPageState extends State<LoginPage> {
                             style: const TextStyle(fontSize: 14),
                             onSubmitted: (_) => _login(),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
                           SizedBox(
                             width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: _isLoading ? null : _login,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xff0F3D2E),
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 14),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: _isLoading ? null : BrandGradients.button,
+                                color: _isLoading ? Colors.grey.shade300 : null,
+                                borderRadius: BorderRadius.circular(12),
+                                boxShadow: _isLoading
+                                    ? null
+                                    : [
+                                        BoxShadow(
+                                          color: BrandColors.brand900.withOpacity(0.28),
+                                          blurRadius: 16,
+                                          offset: const Offset(0, 8),
+                                        ),
+                                      ],
                               ),
-                              child: _isLoading
-                                  ? const SizedBox(
-                                      height: 20,
-                                      width: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                                    )
-                                  : const Text('Masuk', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+                              child: ElevatedButton(
+                                onPressed: _isLoading ? null : _login,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.transparent,
+                                  shadowColor: Colors.transparent,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 16),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                                child: _isLoading
+                                    ? const SizedBox(
+                                        height: 20,
+                                        width: 20,
+                                        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                                      )
+                                    : const Text('Masuk', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 0.3)),
+                              ),
                             ),
                           ),
                         ],
@@ -387,13 +417,20 @@ class _LoginPageState extends State<LoginPage> {
           ),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.only(top: 16, bottom: 28),
             color: Colors.white,
             child: Column(
               children: [
-                Text('Versi 1.0.3', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                Image.asset('assets/Logo_MTD_lurus.png', height: 30),
-                const SizedBox(height: 35),
+                Image.asset('assets/Logo_MTD_lurus.png', height: 40),
+                const SizedBox(height: 10),
+                Text(
+                  'Versi 1.0.4',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.grey.shade400,
+                    letterSpacing: 0.3,
+                  ),
+                ),
               ],
             ),
           ),

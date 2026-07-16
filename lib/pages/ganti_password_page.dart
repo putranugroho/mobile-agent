@@ -1,6 +1,10 @@
 // lib/pages/ganti_password_page.dart
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
+import '../theme/app_colors.dart';
+import '../theme/app_theme.dart';
+import '../theme/app_typography.dart';
+import '../widgets/gradient_button.dart';
 
 class GantiPasswordPage extends StatefulWidget {
   final String bprId;
@@ -79,19 +83,18 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         title: Row(
           children: [
             Icon(
-              isSuccess ? Icons.check_circle_outline : Icons.error_outline,
-              color: isSuccess ? Colors.green : Colors.red,
+              isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+              color: isSuccess ? AppColors.approvedFg : AppColors.danger,
               size: 22,
             ),
             const SizedBox(width: 8),
-            Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            Expanded(child: Text(title)),
           ],
         ),
-        content: Text(message, style: const TextStyle(fontSize: 13)),
+        content: Text(message, style: AppText.bodyStyle(size: 13, color: AppColors.inkSoft)),
         actions: [
           ElevatedButton(
             onPressed: () {
@@ -99,11 +102,11 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
               if (isSuccess) Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: isSuccess ? const Color(0xff0F3D2E) : Colors.red.shade600,
+              backgroundColor: isSuccess ? AppColors.brand900 : AppColors.danger,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
             ),
-            child: const Text('OK', style: TextStyle(fontSize: 13)),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -119,16 +122,14 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
     return TextField(
       controller: controller,
       obscureText: obscure,
-      style: const TextStyle(fontSize: 14),
+      style: AppText.bodyStyle(size: 14, color: AppColors.ink),
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: const Icon(Icons.lock_outline, size: 20),
+        prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
         suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_off : Icons.visibility, size: 20),
+          icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
           onPressed: onToggle,
         ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       ),
     );
   }
@@ -144,13 +145,10 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: AppColors.surfaceAlt,
       appBar: AppBar(
         title: const Text('Ganti Password'),
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xff0F3D2E),
         centerTitle: true,
-        elevation: 0,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -161,19 +159,19 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
             // Info user
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: const Color(0xff0F3D2E).withOpacity(0.07),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xff0F3D2E).withOpacity(0.15)),
+                gradient: AppGradients.header,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+                boxShadow: AppShadows.card,
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.person_outline, size: 18, color: Color(0xff0F3D2E)),
-                  const SizedBox(width: 8),
+                  const Icon(Icons.person_outline_rounded, size: 18, color: Colors.white),
+                  const SizedBox(width: 10),
                   Text(
                     widget.userId,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xff0F3D2E)),
+                    style: AppText.monoStyle(size: 13, weight: FontWeight.w600, color: Colors.white),
                   ),
                 ],
               ),
@@ -185,9 +183,10 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.grey.shade200),
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppRadius.lg),
+                border: Border.all(color: AppColors.border),
+                boxShadow: AppShadows.card,
               ),
               child: Column(
                 children: [
@@ -213,33 +212,20 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
                   ),
                   const SizedBox(height: 24),
 
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xff0F3D2E),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20, width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                              ),
-                            )
-                          : const Text('Simpan Password', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    ),
+                  GradientButton(
+                    label: 'Simpan Password',
+                    loading: _isLoading,
+                    onPressed: _isLoading ? null : _submit,
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 12),
-            Text('Password minimal 6 karakter', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
+            const SizedBox(height: 14),
+            Text(
+              'Password minimal 6 karakter',
+              style: AppText.bodyStyle(size: 11, weight: FontWeight.w500, color: AppColors.inkFaint),
+            ),
           ],
         ),
       ),

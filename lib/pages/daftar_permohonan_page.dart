@@ -47,7 +47,37 @@ class DaftarPermohonanPage extends StatelessWidget {
             }
 
             if (notifier.data.isEmpty) {
-              return const Center(child: Text('Tidak ada data pengajuan'));
+              return Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        color: const Color(0xffEAF3EE),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.inbox_rounded, size: 34, color: Colors.grey.shade500),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Belum ada pengajuan',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Pengajuan permohonan pinjaman akan tampil di sini.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 12.5, color: Colors.grey.shade500),
+                    ),
+                  ],
+                ),
+              );
             }
 
             return RefreshIndicator(

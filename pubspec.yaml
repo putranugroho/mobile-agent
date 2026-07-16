@@ -72,6 +72,7 @@ flutter:
     - assets/medfo_logo.jpeg
     - assets/Logo_MTD_lurus.png
     - assets/logo_medfo_agent.png
+    - assets/logo_medfo_agent_trimmed.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

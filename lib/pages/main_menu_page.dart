@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../repositories/permohonan_pinjaman_repository.dart';
 import '../network/network.dart';
+import '../widgets/brand_logo.dart';
 import 'daftar_permohonan_page.dart';
 import 'permohonan_histori_page.dart';
 import 'profile_page.dart';
@@ -87,7 +88,22 @@ class _MainMenuPageState extends State<MainMenuPage> {
     } catch (e) {
       debugPrint('❌ Logout on exit error: $e');
     }
-    // Tutup aplikasi
+
+    // SystemNavigator.pop() TIDAK menjamin proses/isolate Flutter benar-benar
+    // mati — di Android kadang cuma activity yang di-finish(), dan kalau
+    // user buka lagi dari recent-apps sebelum OS betul-betul evict proses,
+    // widget tree lama (halaman ini) bisa ter-resume apa adanya. Karena
+    // logoutCurrentSession() di atas sudah menghapus sesi lokal, redirect
+    // eksplisit ke LoginPage dulu supaya kalau itu terjadi, yang muncul
+    // saat resume adalah halaman Login yang benar — bukan halaman ini
+    // dengan bpr_id yang sudah kosong.
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+    }
+
     SystemNavigator.pop();
   }
 
@@ -101,16 +117,23 @@ class _MainMenuPageState extends State<MainMenuPage> {
         await _onWillPop();
       },
       child: Scaffold(
-        body: _pages[_selectedIndex],
+        // PENTING: pakai IndexedStack, BUKAN `_pages[_selectedIndex]` langsung.
+        // Cara lama membongkar (unmount) halaman yang sedang tidak aktif
+        // begitu tab diganti. Kalau itu terjadi SAAT ProfilPage masih
+        // menunggu proses logout (network call tanpa timeout, bisa lama
+        // di sinyal buruk), context ProfilPage jadi invalid pas logout
+        // selesai → redirect ke LoginPage batal diam-diam, padahal sesi
+        // lokal sudah kepalang dihapus. IndexedStack menjaga semua tab
+        // tetap hidup di tree, cuma disembunyikan.
+        body: IndexedStack(index: _selectedIndex, children: _pages),
         bottomNavigationBar: Container(
-          decoration: BoxDecoration(
-            color: const Color(0xff0F3D2E),
+          decoration: const BoxDecoration(
+            gradient: BrandGradients.header,
             boxShadow: [
               BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                spreadRadius: 1,
-                blurRadius: 4,
-                offset: const Offset(0, -2),
+                color: Color(0x22000000),
+                blurRadius: 12,
+                offset: Offset(0, -3),
               ),
             ],
           ),
@@ -118,17 +141,18 @@ class _MainMenuPageState extends State<MainMenuPage> {
             currentIndex: _selectedIndex,
             onTap: (index) => setState(() => _selectedIndex = index),
             selectedItemColor: Colors.white,
-            unselectedItemColor: Colors.grey,
+            unselectedItemColor: Colors.white.withOpacity(0.55),
             type: BottomNavigationBarType.fixed,
-            backgroundColor: const Color(0xff0F3D2E),
+            backgroundColor: Colors.transparent,
             elevation: 0,
+            selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
             items: const [
               BottomNavigationBarItem(
-                icon: Icon(Icons.home),
+                icon: Icon(Icons.home_rounded),
                 label: 'Menu Utama',
               ),
               BottomNavigationBarItem(
-                icon: Icon(Icons.person),
+                icon: Icon(Icons.person_rounded),
                 label: 'Profil',
               ),
             ],
@@ -176,9 +200,9 @@ class _MainMenuContentState extends State<MainMenuContent> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffEAF3EE),
+      backgroundColor: BrandColors.canvas,
       appBar: AppBar(
-        toolbarHeight: 78,
+        toolbarHeight: 66,
         title: Row(
           children: [
             // Zona 1: logo medfo, rapat ke pinggir kiri
@@ -187,14 +211,14 @@ class _MainMenuContentState extends State<MainMenuContent> {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: Padding(
-                  padding: const EdgeInsets.only(left: 2, top: 2, bottom: 2),
+                  padding: const EdgeInsets.only(left: 4, top: 6, bottom: 6),
                   child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(12),
                     child: SizedBox(
-                      width: 111, // rasio 3:2 dari tinggi 74 (toolbarHeight 78 - 2px atas - 2px bawah)
-                      height: 74,
+                      width: 52,
+                      height: 52,
                       child: Image.asset(
-                        'assets/logo_medfo_agent.png',
+                        'assets/logo_medfo_agent_trimmed.png',
                         fit: BoxFit.contain,
                       ),
                     ),
@@ -214,8 +238,8 @@ class _MainMenuContentState extends State<MainMenuContent> {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(8),
                     child: SizedBox(
-                      width: 111, // rasio 3:2 dari tinggi 74
-                      height: 74,
+                      width: 96,
+                      height: 56,
                       child: _logoBprUrl != null
                           ? Image.network(
                               _logoBprUrl!,
@@ -250,29 +274,53 @@ class _MainMenuContentState extends State<MainMenuContent> {
       body: Column(
         children: [
           Container(
-            color: const Color(0xff0F3D2E),
-            padding: const EdgeInsets.all(20),
+            decoration: const BoxDecoration(gradient: BrandGradients.hero),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(width: 12),
+                SealInitials(name: widget.userName, size: 46, fontSize: 16),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        widget.userName,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                        'Selamat datang,',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.white.withOpacity(0.75),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 1),
                       Text(
-                        'BPR_ID: ${widget.bprId}',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey.shade300,
+                        widget.userName,
+                        style: const TextStyle(
+                          fontSize: 19,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.white.withOpacity(0.18)),
+                        ),
+                        child: Text(
+                          'BPR_ID: ${widget.bprId}',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                            letterSpacing: 0.4,
+                          ),
                         ),
                       ),
                     ],
@@ -282,7 +330,7 @@ class _MainMenuContentState extends State<MainMenuContent> {
             ),
           ),
           Container(
-            color: const Color(0xffEAF3EE),
+            color: BrandColors.canvas,
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
             child: Row(
               children: [
@@ -298,7 +346,7 @@ class _MainMenuContentState extends State<MainMenuContent> {
           ),
           Expanded(
             child: Container(
-              color: const Color(0xffEAF3EE),
+              color: BrandColors.canvas,
               child: _selectedMenu == 'permohonan'
                   ? const DaftarPermohonanPage(isEmbedded: true)
                   : const HistoriPermohonanPage(isEmbedded: true),
@@ -321,23 +369,35 @@ class _MainMenuContentState extends State<MainMenuContent> {
   Widget _buildMenuChip(String label, bool isSelected, VoidCallback onTap) {
     return Expanded(
       child: InkWell(
+        borderRadius: BorderRadius.circular(30),
         onTap: onTap,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
+          padding: const EdgeInsets.symmetric(vertical: 14),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xff0F3D2E) : Colors.white,
+            gradient: isSelected ? BrandGradients.button : null,
+            color: isSelected ? null : Colors.white,
             borderRadius: BorderRadius.circular(30),
             border: Border.all(
-              color: isSelected ? const Color(0xff0F3D2E) : const Color(0xffD0D8D3),
+              color: isSelected ? Colors.transparent : BrandColors.border,
               width: 1.5,
             ),
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: BrandColors.brand900.withOpacity(0.22),
+                      blurRadius: 12,
+                      offset: const Offset(0, 5),
+                    ),
+                  ]
+                : null,
           ),
           child: Center(
             child: Text(
               label,
               style: TextStyle(
-                color: isSelected ? Colors.white : Colors.grey.shade500,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                fontSize: 14,
+                color: isSelected ? Colors.white : BrandColors.inkSoft,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
               ),
             ),
           ),

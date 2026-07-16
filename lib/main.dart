@@ -7,6 +7,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'pages/login_page.dart';
 import 'services/notification_service.dart';
 import 'services/session_guard.dart';
+import 'theme/app_theme.dart';
 
 final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
 
@@ -73,7 +74,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       navigatorKey: appNavigatorKey,
       title: 'Mobile Agent',
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff0F3D2E)), useMaterial3: true),
+      theme: buildAppTheme(),
       home: const LoginPage(),
       debugShowCheckedModeBanner: false,
       builder: (context, child) {

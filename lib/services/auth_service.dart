@@ -19,6 +19,12 @@ class AuthService {
   static const String _roleUserKey = 'role_user';
   static const String _jabatanKey = 'jabatan';
 
+  // Tanpa timeout, http.post bisa menggantung lama sekali di sinyal
+  // buruk (bahkan bisa 'selamanya' selama koneksi TCP belum putus),
+  // sehingga tombol Logout terasa macet dan proses lain menganggap
+  // request masih berjalan padahal user sudah lama pindah halaman.
+  static const Duration _httpTimeout = Duration(seconds: 15);
+
   // ── LOGIN ──────────────────────────────────────────────────────────────────
   Future<LoginResponse> login({required String bprId, required String userId, required String password}) async {
     final normalizedBprId = bprId.trim();
@@ -90,7 +96,7 @@ class AuthService {
         'device_id': deviceId,
         'device_name': 'Mobile Agent',
       }),
-    );
+    ).timeout(_httpTimeout);
 
     final result = LoginResponse.fromJson(jsonDecode(response.body));
 
@@ -199,7 +205,7 @@ class AuthService {
         Uri.parse(NetworkUrl.sessionPrecheck()),
         headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
         body: jsonEncode(payload),
-      );
+      ).timeout(_httpTimeout);
 
       debugPrint('🔐 SESSION PRECHECK STATUS: ${response.statusCode}');
       debugPrint('🔐 SESSION PRECHECK RESPONSE: ${response.body}');
@@ -274,7 +280,7 @@ class AuthService {
       Uri.parse(NetworkUrl.updateFcmToken()),
       headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey},
       body: jsonEncode(payload),
-    );
+    ).timeout(_httpTimeout);
 
     return AuthResponse.fromJson(jsonDecode(response.body));
   }
@@ -331,7 +337,7 @@ class AuthService {
       Uri.parse(NetworkUrl.sessionLogout()),
       headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
       body: jsonEncode(payload),
-    );
+    ).timeout(_httpTimeout);
 
     debugPrint('🚪 SESSION LOGOUT STATUS: ${response.statusCode}');
     debugPrint('🚪 SESSION LOGOUT RESPONSE: ${response.body}');
@@ -381,7 +387,7 @@ class AuthService {
           'API-Key': NetworkUrl.apiKey,
         },
         body: jsonEncode(payload),
-      );
+      ).timeout(_httpTimeout);
 
       debugPrint('🧭 SESSION CHECK STATUS: ${response.statusCode}');
       debugPrint('🧭 SESSION CHECK RESPONSE: ${response.body}');
@@ -549,7 +555,7 @@ class AuthService {
         Uri.parse(NetworkUrl.sessionStart()),
         headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
         body: jsonEncode(payload),
-      );
+      ).timeout(_httpTimeout);
 
       debugPrint('🚀 SESSION START STATUS: ${response.statusCode}');
       debugPrint('🚀 SESSION START RESPONSE: ${response.body}');

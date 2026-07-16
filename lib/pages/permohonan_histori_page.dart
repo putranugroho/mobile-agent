@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../notifiers/permohonan_pinjaman_notifier.dart';
 import '../models/permohonan_pinjaman_model.dart';
+import '../theme/app_colors.dart';
+import '../widgets/pengajuan_card.dart';
 import 'detail_permohonan_page.dart';
 
 class HistoriPermohonanPage extends StatelessWidget {
@@ -13,176 +15,69 @@ class HistoriPermohonanPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xffEAF3EE),
+      backgroundColor: AppColors.surfaceAlt,
       appBar: isEmbedded
           ? null
           : AppBar(
               title: const Text('Histori Proses'),
-              backgroundColor: Colors.white,
-              foregroundColor: const Color(0xff0F3D2E),
               centerTitle: true,
-              elevation: 0,
             ),
       body: ChangeNotifierProvider(
         create: (context) => PengajuanNotifier()..loadHistori(),
         child: Consumer<PengajuanNotifier>(
           builder: (context, notifier, child) {
             if (notifier.isLoadingHistori && notifier.historiData.isEmpty) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(
+                child: CircularProgressIndicator(color: AppColors.brand700),
+              );
             }
 
             if (notifier.errorMessageHistori.isNotEmpty) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                    const SizedBox(height: 16),
-                    Text(notifier.errorMessageHistori),
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: () => notifier.loadHistori(),
-                      child: const Text('Coba Lagi'),
-                    ),
-                  ],
-                ),
+              return PengajuanStateMessage(
+                icon: Icons.cloud_off_rounded,
+                message: notifier.errorMessageHistori,
+                actionLabel: 'Coba Lagi',
+                onAction: () => notifier.loadHistori(),
               );
             }
 
             if (notifier.historiData.isEmpty) {
-              return const Center(
-                child: Text('Tidak ada data histori'),
+              return const PengajuanStateMessage(
+                icon: Icons.history_rounded,
+                message: 'Belum ada histori proses',
               );
             }
 
             return RefreshIndicator(
+              color: AppColors.brand700,
               onRefresh: notifier.refreshHistori,
               child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
                 itemCount: notifier.historiData.length,
                 itemBuilder: (context, index) {
-                  return _buildCard(notifier.historiData[index], context, notifier);
+                  final item = notifier.historiData[index];
+                  return PengajuanCard(
+                    nama: item.nama,
+                    noHp: item.noHp,
+                    status: item.status,
+                    nominalText: _formatRupiah(item.nilaiPinjaman),
+                    tanggalText: _formatDate(item.tglinput),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => DetailPermohonanPage(
+                            data: item,
+                            notifier: notifier,
+                          ),
+                        ),
+                      );
+                    },
+                  );
                 },
               ),
             );
           },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCard(PengajuanModel item, BuildContext context, PengajuanNotifier notifier) {
-    Color statusColor = item.status == '2' ? Colors.green : Colors.red;
-    String statusText = item.status == '2' ? 'Disetujui' : 'Ditolak';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      color: Colors.white,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: Colors.grey.shade300, width: 1),
-      ),
-      child: InkWell(
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => DetailPermohonanPage(
-                data: item,
-                notifier: notifier,
-              ),
-            ),
-          );
-        },
-        borderRadius: BorderRadius.circular(10),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Baris 1: Nama + Status badge
-              Row(
-                children: [
-                  const Icon(Icons.person, size: 14, color: Color(0xff4A7C59)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      item.nama,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xff0F3D2E),
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: statusColor.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      statusText,
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: statusColor,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.chevron_right, size: 16, color: Colors.grey.shade400),
-                ],
-              ),
-              const SizedBox(height: 5),
-
-              // Baris 2: No HP
-              Row(
-                children: [
-                  const Icon(Icons.phone, size: 12, color: Color(0xff4A7C59)),
-                  const SizedBox(width: 6),
-                  Text(
-                    item.noHp,
-                    style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-
-              // Baris 3: Nilai Pinjaman
-              Row(
-                children: [
-                  const Icon(Icons.attach_money, size: 12, color: Color(0xff4A7C59)),
-                  const SizedBox(width: 6),
-                  Text(
-                    _formatRupiah(item.nilaiPinjaman),
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xff0F3D2E),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-
-              // Baris 4: Tanggal
-              Row(
-                children: [
-                  Icon(Icons.calendar_today, size: 11, color: Colors.grey.shade400),
-                  const SizedBox(width: 5),
-                  Text(
-                    _formatDate(item.tglinput),
-                    style: TextStyle(fontSize: 10, color: Colors.grey.shade400),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
       ),
     );

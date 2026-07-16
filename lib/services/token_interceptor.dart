@@ -6,6 +6,11 @@ import '../network/network.dart';
 class TokenInterceptor {
   static const String _tokenKey = 'auth_token';
 
+  // Sama seperti di AuthService: batasi lama tunggu supaya request yang
+  // dipakai flow logout/ganti password tidak menggantung tanpa batas
+  // saat sinyal buruk.
+  static const Duration _timeout = Duration(seconds: 15);
+
   static Future<Map<String, String>> getHeaders() async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString(_tokenKey) ?? '';
@@ -23,8 +28,8 @@ class TokenInterceptor {
   }) async {
     final defaultHeaders = await getHeaders();
     final mergedHeaders = {...defaultHeaders, ...?headers};
-    
-    return http.post(url, headers: mergedHeaders, body: body);
+
+    return http.post(url, headers: mergedHeaders, body: body).timeout(_timeout);
   }
 
   static Future<http.Response> get(
@@ -33,7 +38,7 @@ class TokenInterceptor {
   }) async {
     final defaultHeaders = await getHeaders();
     final mergedHeaders = {...defaultHeaders, ...?headers};
-    
-    return http.get(url, headers: mergedHeaders);
+
+    return http.get(url, headers: mergedHeaders).timeout(_timeout);
   }
 }
