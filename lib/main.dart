@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'pages/login_page.dart';
+import 'services/auth_service.dart';
 import 'services/notification_service.dart';
 import 'services/session_guard.dart';
 import 'theme/app_theme.dart';
@@ -31,7 +32,12 @@ Future<void> setupFirebaseMessaging() async {
   );
 
   final token = await messaging.getToken();
-  debugPrint('🔥 FCM TOKEN: $token');
+  debugPrint('🔥 FCM token tersedia: ${token != null && token.isNotEmpty}');
+
+  FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
+    final result = await AuthService().updateFcmToken(newToken);
+    debugPrint('🔥 FCM token refresh: ${result.code}');
+  });
 
   // Foreground: FCM delivers to app but does NOT auto-show notification on Android
   // We must display it manually via flutter_local_notifications

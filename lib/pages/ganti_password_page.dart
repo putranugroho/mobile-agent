@@ -1,18 +1,18 @@
 // lib/pages/ganti_password_page.dart
 import 'package:flutter/material.dart';
+
 import '../services/auth_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
 import '../widgets/gradient_button.dart';
+import 'login_page.dart';
 
 class GantiPasswordPage extends StatefulWidget {
-  final String bprId;
   final String userId;
 
   const GantiPasswordPage({
     super.key,
-    required this.bprId,
     required this.userId,
   });
 
@@ -21,72 +21,85 @@ class GantiPasswordPage extends StatefulWidget {
 }
 
 class _GantiPasswordPageState extends State<GantiPasswordPage> {
-  final _oldPassCtrl     = TextEditingController();
-  final _newPassCtrl     = TextEditingController();
-  final _confirmPassCtrl = TextEditingController();
-
-  bool _obscureOld     = true;
-  bool _obscureNew     = true;
-  bool _obscureConfirm = true;
-  bool _isLoading      = false;
-
+  final TextEditingController _oldPassCtrl = TextEditingController();
+  final TextEditingController _newPassCtrl = TextEditingController();
+  final TextEditingController _confirmPassCtrl = TextEditingController();
   final AuthService _authService = AuthService();
 
-  Future<void> _submit() async {
-    final oldPass     = _oldPassCtrl.text;
-    final newPass     = _newPassCtrl.text;
-    final confirmPass = _confirmPassCtrl.text;
+  bool _obscureOld = true;
+  bool _obscureNew = true;
+  bool _obscureConfirm = true;
+  bool _isLoading = false;
 
-    if (oldPass.isEmpty || newPass.isEmpty || confirmPass.isEmpty) {
-      _showDialog('Gagal', 'Semua kolom harus diisi');
+  Future<void> _submit() async {
+    FocusScope.of(context).unfocus();
+
+    final oldPassword = _oldPassCtrl.text;
+    final newPassword = _newPassCtrl.text;
+    final confirmPassword = _confirmPassCtrl.text;
+
+    if (oldPassword.isEmpty ||
+        newPassword.isEmpty ||
+        confirmPassword.isEmpty) {
+      _showDialog('Gagal', 'Semua kolom harus diisi.');
       return;
     }
-    if (newPass.length < 6) {
-      _showDialog('Gagal', 'Password baru minimal 6 karakter');
+    if (newPassword.length < 8) {
+      _showDialog('Gagal', 'Password baru minimal 8 karakter.');
       return;
     }
-    if (newPass != confirmPass) {
-      _showDialog('Gagal', 'Password baru dan konfirmasi tidak cocok');
+    if (newPassword != confirmPassword) {
+      _showDialog('Gagal', 'Password baru dan konfirmasi tidak cocok.');
       return;
     }
-    if (newPass == oldPass) {
-      _showDialog('Gagal', 'Password baru tidak boleh sama dengan password lama');
+    if (newPassword == oldPassword) {
+      _showDialog(
+        'Gagal',
+        'Password baru tidak boleh sama dengan password lama.',
+      );
       return;
     }
 
     setState(() => _isLoading = true);
 
-    try {
-      final result = await _authService.changePassword(
-        bprId:       widget.bprId,
-        userId:      widget.userId,
-        oldPassword: oldPass,
-        newPassword: newPass,
-      );
+    final result = await _authService.changePassword(
+      oldPassword: oldPassword,
+      newPassword: newPassword,
+      confirmPassword: confirmPassword,
+    );
 
-      if (!mounted) return;
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-      if (result.isSuccess) {
-        _showDialog('Berhasil', result.message, isSuccess: true);
-      } else {
-        _showDialog('Gagal', result.message);
-      }
-    } catch (_) {
-      if (mounted) _showDialog('Gagal', 'Gagal terhubung ke server.\nPeriksa koneksi Anda.');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+    if (!result.isSuccess) {
+      _showDialog('Gagal', result.message);
+      return;
     }
+
+    _showDialog(
+      'Berhasil',
+      result.message.isEmpty
+          ? 'Password berhasil diubah. Silakan login kembali.'
+          : result.message,
+      isSuccess: true,
+    );
   }
 
-  void _showDialog(String title, String message, {bool isSuccess = false}) {
-    showDialog(
+  void _showDialog(
+    String title,
+    String message, {
+    bool isSuccess = false,
+  }) {
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: Row(
           children: [
             Icon(
-              isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded,
+              isSuccess
+                  ? Icons.check_circle_outline_rounded
+                  : Icons.error_outline_rounded,
               color: isSuccess ? AppColors.approvedFg : AppColors.danger,
               size: 22,
             ),
@@ -94,17 +107,30 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
             Expanded(child: Text(title)),
           ],
         ),
-        content: Text(message, style: AppText.bodyStyle(size: 13, color: AppColors.inkSoft)),
+        content: Text(
+          message,
+          style: AppText.bodyStyle(size: 13, color: AppColors.inkSoft),
+        ),
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
-              if (isSuccess) Navigator.pop(context);
+              Navigator.pop(dialogContext);
+              if (isSuccess && mounted) {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                  (route) => false,
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: isSuccess ? AppColors.brand900 : AppColors.danger,
+              backgroundColor:
+                  isSuccess ? AppColors.brand900 : AppColors.danger,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 8,
+              ),
             ),
             child: const Text('OK'),
           ),
@@ -121,14 +147,20 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
   }) {
     return TextField(
       controller: controller,
+      enabled: !_isLoading,
       obscureText: obscure,
       style: AppText.bodyStyle(size: 14, color: AppColors.ink),
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: const Icon(Icons.lock_outline_rounded, size: 20),
         suffixIcon: IconButton(
-          icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, size: 20),
-          onPressed: onToggle,
+          icon: Icon(
+            obscure
+                ? Icons.visibility_off_rounded
+                : Icons.visibility_rounded,
+            size: 20,
+          ),
+          onPressed: _isLoading ? null : onToggle,
         ),
       ),
     );
@@ -155,11 +187,12 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
         child: Column(
           children: [
             const SizedBox(height: 8),
-
-            // Info user
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 12,
+              ),
               decoration: BoxDecoration(
                 gradient: AppGradients.header,
                 borderRadius: BorderRadius.circular(AppRadius.md),
@@ -167,19 +200,24 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.person_outline_rounded, size: 18, color: Colors.white),
+                  const Icon(
+                    Icons.person_outline_rounded,
+                    size: 18,
+                    color: Colors.white,
+                  ),
                   const SizedBox(width: 10),
                   Text(
                     widget.userId,
-                    style: AppText.monoStyle(size: 13, weight: FontWeight.w600, color: Colors.white),
+                    style: AppText.monoStyle(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
-
-            // Form
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -194,24 +232,29 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
                     controller: _oldPassCtrl,
                     label: 'Password Lama',
                     obscure: _obscureOld,
-                    onToggle: () => setState(() => _obscureOld = !_obscureOld),
+                    onToggle: () {
+                      setState(() => _obscureOld = !_obscureOld);
+                    },
                   ),
                   const SizedBox(height: 16),
                   _buildField(
                     controller: _newPassCtrl,
                     label: 'Password Baru',
                     obscure: _obscureNew,
-                    onToggle: () => setState(() => _obscureNew = !_obscureNew),
+                    onToggle: () {
+                      setState(() => _obscureNew = !_obscureNew);
+                    },
                   ),
                   const SizedBox(height: 16),
                   _buildField(
                     controller: _confirmPassCtrl,
                     label: 'Konfirmasi Password Baru',
                     obscure: _obscureConfirm,
-                    onToggle: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                    onToggle: () {
+                      setState(() => _obscureConfirm = !_obscureConfirm);
+                    },
                   ),
                   const SizedBox(height: 24),
-
                   GradientButton(
                     label: 'Simpan Password',
                     loading: _isLoading,
@@ -220,11 +263,14 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
                 ],
               ),
             ),
-
             const SizedBox(height: 14),
             Text(
-              'Password minimal 6 karakter',
-              style: AppText.bodyStyle(size: 11, weight: FontWeight.w500, color: AppColors.inkFaint),
+              'Password minimal 8 karakter',
+              style: AppText.bodyStyle(
+                size: 11,
+                weight: FontWeight.w500,
+                color: AppColors.inkFaint,
+              ),
             ),
           ],
         ),

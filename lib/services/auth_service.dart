@@ -1,12 +1,14 @@
 // lib/services/auth_service.dart
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+
 import '../models/auth_model.dart';
 import '../network/network.dart';
-import 'token_interceptor.dart';
 
 class AuthService {
   static const String _tokenKey = 'auth_token';
@@ -18,346 +20,365 @@ class AuthService {
   static const String _noCifKey = 'no_cif';
   static const String _roleUserKey = 'role_user';
   static const String _jabatanKey = 'jabatan';
+  static const String _installationDeviceIdKey =
+      'mobile_agent_device_id';
 
-  // Tanpa timeout, http.post bisa menggantung lama sekali di sinyal
-  // buruk (bahkan bisa 'selamanya' selama koneksi TCP belum putus),
-  // sehingga tombol Logout terasa macet dan proses lain menganggap
-  // request masih berjalan padahal user sudah lama pindah halaman.
-  static const Duration _httpTimeout = Duration(seconds: 15);
+  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const String _defaultDeviceName = 'Mobile Agent Android';
 
   // ── LOGIN ──────────────────────────────────────────────────────────────────
-  Future<LoginResponse> login({required String bprId, required String userId, required String password}) async {
-    final normalizedBprId = bprId.trim();
-    final normalizedUserId = userId.trim().toUpperCase();
+  Future<LoginResponse> login({
+    required String username,
+    required String password,
+  }) async {
+    final normalizedUsername = username.trim().toUpperCase();
 
-    if (normalizedBprId.isEmpty) {
+    if (normalizedUsername.isEmpty) {
       return const LoginResponse(
         code: '001',
         status: 'error',
-        message: 'BPR ID wajib diisi.',
-        token: null,
-        user: null,
+        message: 'Username wajib diisi.',
       );
     }
 
-    if (normalizedUserId.isEmpty) {
+    if (password.isEmpty) {
       return const LoginResponse(
         code: '001',
         status: 'error',
-        message: 'User ID wajib diisi.',
-        token: null,
-        user: null,
+        message: 'Password wajib diisi.',
       );
     }
 
     final deviceId = await getOrCreateDeviceId();
+    final fcmToken = await getFcmToken();
 
-    // PRECHECK DEVICE BINDING DULU sebelum login lama.
-    // Tujuan: kalau user/device sudah tidak valid, jangan panggil /petugas/login
-    // supaya endpoint lama tidak sempat mengubah is_login.
-    final precheck = await precheckDeviceBinding(
-      bprId: normalizedBprId,
-      username: normalizedUserId,
-      deviceId: deviceId,
-    );
-
-    if (precheck['success'] != true) {
-      return LoginResponse(
-        code: precheck['code']?.toString() ?? '423',
-        status: 'error',
-        message: precheck['message']?.toString() ?? 'Perangkat tidak valid untuk login.',
-        token: null,
-        user: null,
-      );
-    }
-
-    final precheckData = precheck['data'];
-    final precheckBprId = precheckData is Map
-        ? precheckData['bpr_id']?.toString().trim() ?? ''
-        : '';
-
-    if (precheckBprId.isNotEmpty && precheckBprId != normalizedBprId) {
-      return const LoginResponse(
-        code: '409',
-        status: 'error',
-        message: 'BPR ID pada hasil precheck tidak sesuai dengan BPR ID login.',
-        token: null,
-        user: null,
-      );
-    }
-
-    final response = await http.post(
-      Uri.parse(NetworkUrl.login()),
-      headers: NetworkUrl.jsonHeaders(),
-      body: jsonEncode({
-        'bpr_id': normalizedBprId,
-        'user_id': normalizedUserId,
+    final json = await _postJson(
+      NetworkUrl.login(),
+      {
+        'username': normalizedUsername,
         'password': password,
         'device_id': deviceId,
-        'device_name': 'Mobile Agent',
-      }),
-    ).timeout(_httpTimeout);
+        'device_name': _defaultDeviceName,
+        'fcm_token': fcmToken,
+      },
+      logLabel: 'LOGIN',
+    );
 
-    final result = LoginResponse.fromJson(jsonDecode(response.body));
+    final result = LoginResponse.fromJson(json);
 
-    if (result.isSuccess && result.token != null) {
-      final resolvedUserId = result.user?.userId ?? normalizedUserId;
-      final resolvedNoCif = result.user?.noCif ?? resolvedUserId;
-      final resolvedNama = result.user?.nama ?? normalizedUserId;
-      final responseBprId = result.user?.bprId.trim() ?? '';
-      final resolvedBprId = responseBprId.isNotEmpty ? responseBprId : normalizedBprId;
-      final resolvedRoleUser = result.user?.roleUser ?? '';
-      final resolvedJabatan = result.user?.jabatan ?? '';
+    if (!result.isSuccess) return result;
 
-      final sessionToken = result.token!;
+    final user = result.user;
+    final token = result.token ?? result.sessionToken ?? '';
+    final sessionToken = result.sessionToken ?? result.token ?? '';
 
-      await _saveSession(
-        token: result.token!,
-        userId: resolvedUserId,
-        noCif: resolvedNoCif,
-        nama: resolvedNama,
-        bprId: resolvedBprId,
-        deviceId: deviceId,
-        sessionToken: sessionToken,
-        roleUser: resolvedRoleUser,
-        jabatan: resolvedJabatan,
+    if (user == null || token.isEmpty || sessionToken.isEmpty) {
+      return const LoginResponse(
+        code: 'SESSION_ERROR',
+        status: 'error',
+        message:
+            'Login berhasil, tetapi response session tidak lengkap. Silakan login kembali.',
       );
-
-      final startSessionResult = await startSession(
-        bprId: resolvedBprId,
-        username: resolvedUserId,
-        noCif: resolvedNoCif,
-        deviceId: deviceId,
-        deviceName: 'Mobile Agent',
-        sessionToken: sessionToken,
-        roleUser: resolvedRoleUser,
-        jabatan: resolvedJabatan,
-      );
-
-      if (startSessionResult['success'] != true) {
-        // Karena login lama sudah sempat berhasil, panggil logout lama diam-diam
-        // agar status session lama tidak menggantung jika startSession gagal.
-        await logoutLegacySilently(bprId: resolvedBprId, userId: resolvedUserId);
-        await clearSession();
-
-        return LoginResponse(
-          code: startSessionResult['code']?.toString() ?? 'SESSION_ERROR',
-          status: 'error',
-          message: startSessionResult['message']?.toString() ?? 'Login berhasil, tetapi gagal memulai session.',
-          token: null,
-          user: null,
-        );
-      }
-
-      try {
-        final fcmToken = await getFcmToken();
-
-        if (fcmToken.isNotEmpty) {
-          await updateFcmToken(
-            bprId: resolvedBprId,
-            noCif: resolvedNoCif,
-            username: resolvedUserId,
-            fcmToken: fcmToken,
-            deviceId: deviceId,
-            sessionToken: sessionToken,
-          );
-        }
-      } catch (_) {
-        // Login tetap sukses walaupun update FCM token gagal.
-      }
     }
+
+    if (user.bprId.isEmpty || user.userId.isEmpty) {
+      return const LoginResponse(
+        code: 'SESSION_ERROR',
+        status: 'error',
+        message:
+            'Login berhasil, tetapi identitas user tidak lengkap. Silakan hubungi administrator.',
+      );
+    }
+
+    await _saveSession(
+      token: token,
+      userId: user.userId,
+      noCif: user.noCif.isEmpty ? user.userId : user.noCif,
+      nama: user.nama.isEmpty ? user.userId : user.nama,
+      bprId: user.bprId,
+      deviceId: deviceId,
+      sessionToken: sessionToken,
+      roleUser: user.roleUser ?? '',
+      jabatan: user.jabatan ?? '',
+    );
 
     return result;
   }
 
-  Future<Map<String, dynamic>> precheckDeviceBinding({
+  // ── AKTIVASI ───────────────────────────────────────────────────────────────
+  Future<AuthResponse> requestActivationOtp({
     required String bprId,
     required String username,
-    required String deviceId,
+    required String phone,
   }) async {
-    try {
-      final normalizedBprId = bprId.trim();
-      final normalizedUsername = username.trim().toUpperCase();
-      final normalizedDeviceId = deviceId.trim();
+    final validation = _validateIdentity(
+      bprId: bprId,
+      username: username,
+      phone: phone,
+    );
+    if (validation != null) return validation;
 
-      if (normalizedBprId.isEmpty) {
-        return {
-          'success': false,
-          'code': '001',
-          'message': 'BPR ID wajib diisi.',
-          'data': {
-            'allowed': false,
-            'reason': 'BPR_ID_REQUIRED',
-          },
-        };
-      }
+    final deviceId = await getOrCreateDeviceId();
+    final json = await _postJson(
+      NetworkUrl.activationRequestOtp(),
+      {
+        'bpr_id': bprId.trim(),
+        'username': username.trim().toUpperCase(),
+        'phone': phone.trim(),
+        'device_id': deviceId,
+        'device_name': _defaultDeviceName,
+      },
+      logLabel: 'ACTIVATION_REQUEST_OTP',
+    );
 
-      final payload = {
-        'bpr_id': normalizedBprId,
-        'username': normalizedUsername,
-        'device_id': normalizedDeviceId,
-      };
-
-      debugPrint('🔐 SESSION PRECHECK URL: ${NetworkUrl.sessionPrecheck()}');
-      debugPrint('🔐 SESSION PRECHECK BODY: ${jsonEncode(payload)}');
-
-      final response = await http.post(
-        Uri.parse(NetworkUrl.sessionPrecheck()),
-        headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
-        body: jsonEncode(payload),
-      ).timeout(_httpTimeout);
-
-      debugPrint('🔐 SESSION PRECHECK STATUS: ${response.statusCode}');
-      debugPrint('🔐 SESSION PRECHECK RESPONSE: ${response.body}');
-
-      if (response.statusCode != 200) {
-        return {'success': false, 'code': 'HTTP_${response.statusCode}', 'message': 'Gagal mengecek perangkat. HTTP ${response.statusCode}', 'data': null};
-      }
-
-      final jsonData = jsonDecode(response.body);
-      return {
-        'success': jsonData['code']?.toString() == '000',
-        'code': jsonData['code']?.toString() ?? '',
-        'message': jsonData['message']?.toString() ?? '',
-        'data': jsonData['data'],
-      };
-    } catch (e) {
-      debugPrint('❌ precheckDeviceBinding error: $e');
-      return {'success': false, 'code': 'EXCEPTION', 'message': 'Gagal mengecek perangkat: $e', 'data': null};
-    }
+    return AuthResponse.fromJson(json);
   }
 
+  Future<AuthResponse> verifyActivationOtp({
+    required String challengeToken,
+    required String otp,
+  }) async {
+    if (challengeToken.trim().isEmpty || otp.trim().isEmpty) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Challenge token dan OTP wajib diisi.',
+      );
+    }
+
+    final json = await _postJson(
+      NetworkUrl.activationVerifyOtp(),
+      {
+        'challenge_token': challengeToken.trim(),
+        'otp': otp.trim(),
+      },
+      logLabel: 'ACTIVATION_VERIFY_OTP',
+    );
+
+    return AuthResponse.fromJson(json);
+  }
+
+  Future<AuthResponse> submitActivation({
+    required String verificationToken,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final validation = _validateNewPassword(
+      newPassword,
+      confirmPassword,
+    );
+    if (validation != null) return validation;
+
+    final json = await _postJson(
+      NetworkUrl.activationSubmit(),
+      {
+        'verification_token': verificationToken.trim(),
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      },
+      logLabel: 'ACTIVATION_SUBMIT',
+    );
+
+    return AuthResponse.fromJson(json);
+  }
+
+  // ── LUPA SANDI ─────────────────────────────────────────────────────────────
+  Future<AuthResponse> requestForgotPasswordOtp({
+    required String bprId,
+    required String username,
+    required String phone,
+  }) async {
+    final validation = _validateIdentity(
+      bprId: bprId,
+      username: username,
+      phone: phone,
+    );
+    if (validation != null) return validation;
+
+    final deviceId = await getOrCreateDeviceId();
+    final json = await _postJson(
+      NetworkUrl.forgotPasswordRequestOtp(),
+      {
+        'bpr_id': bprId.trim(),
+        'username': username.trim().toUpperCase(),
+        'phone': phone.trim(),
+        'device_id': deviceId,
+        'device_name': _defaultDeviceName,
+      },
+      logLabel: 'FORGOT_PASSWORD_REQUEST_OTP',
+    );
+
+    return AuthResponse.fromJson(json);
+  }
+
+  Future<AuthResponse> verifyForgotPasswordOtp({
+    required String challengeToken,
+    required String otp,
+  }) async {
+    if (challengeToken.trim().isEmpty || otp.trim().isEmpty) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Challenge token dan OTP wajib diisi.',
+      );
+    }
+
+    final json = await _postJson(
+      NetworkUrl.forgotPasswordVerifyOtp(),
+      {
+        'challenge_token': challengeToken.trim(),
+        'otp': otp.trim(),
+      },
+      logLabel: 'FORGOT_PASSWORD_VERIFY_OTP',
+    );
+
+    return AuthResponse.fromJson(json);
+  }
+
+  Future<AuthResponse> resetForgotPassword({
+    required String verificationToken,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    final validation = _validateNewPassword(
+      newPassword,
+      confirmPassword,
+    );
+    if (validation != null) return validation;
+
+    final json = await _postJson(
+      NetworkUrl.forgotPasswordReset(),
+      {
+        'verification_token': verificationToken.trim(),
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      },
+      logLabel: 'FORGOT_PASSWORD_RESET',
+    );
+
+    return AuthResponse.fromJson(json);
+  }
+
+  // ── GANTI PASSWORD ─────────────────────────────────────────────────────────
+  Future<AuthResponse> changePassword({
+    required String oldPassword,
+    required String newPassword,
+    required String confirmPassword,
+  }) async {
+    if (oldPassword.isEmpty) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Password lama wajib diisi.',
+      );
+    }
+
+    final validation = _validateNewPassword(
+      newPassword,
+      confirmPassword,
+      oldPassword: oldPassword,
+    );
+    if (validation != null) return validation;
+
+    final session = await getSessionData();
+    final deviceId = session['device_id'] ?? '';
+    final sessionToken = session['session_token'] ?? '';
+
+    if (deviceId.isEmpty || sessionToken.isEmpty) {
+      return const AuthResponse(
+        code: '401',
+        status: 'error',
+        message: 'Session tidak tersedia. Silakan login kembali.',
+      );
+    }
+
+    final json = await _postJson(
+      NetworkUrl.changePassword(),
+      {
+        'device_id': deviceId,
+        'session_token': sessionToken,
+        'old_password': oldPassword,
+        'new_password': newPassword,
+        'confirm_password': confirmPassword,
+      },
+      logLabel: 'CHANGE_PASSWORD',
+    );
+
+    final result = AuthResponse.fromJson(json);
+    if (result.isSuccess) {
+      await clearSession();
+    }
+    return result;
+  }
+
+  // ── FCM ────────────────────────────────────────────────────────────────────
   Future<String> getFcmToken() async {
+    if (kIsWeb) return '';
+
     try {
       final messaging = FirebaseMessaging.instance;
-
-      await messaging.requestPermission(alert: true, badge: true, sound: true);
-
+      await messaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
       final token = await messaging.getToken();
       return token ?? '';
     } catch (e) {
+      debugPrint('FCM token tidak tersedia: $e');
       return '';
     }
   }
 
-  Future<String> getOrCreateDeviceId() async {
-    final prefs = await SharedPreferences.getInstance();
+  Future<AuthResponse> updateFcmToken(String fcmToken) async {
+    final session = await getSessionData();
+    final deviceId = session['device_id'] ?? '';
+    final sessionToken = session['session_token'] ?? '';
 
-    const key = 'mobile_agent_device_id';
-    final existing = prefs.getString(key);
-
-    if (existing != null && existing.isNotEmpty) {
-      return existing;
+    if (deviceId.isEmpty || sessionToken.isEmpty) {
+      return const AuthResponse(
+        code: '401',
+        status: 'error',
+        message: 'Session tidak tersedia.',
+      );
     }
 
-    final newDeviceId = 'MA-${DateTime.now().millisecondsSinceEpoch}';
-    await prefs.setString(key, newDeviceId);
+    final json = await _postJson(
+      NetworkUrl.updateFcmToken(),
+      {
+        'device_id': deviceId,
+        'session_token': sessionToken,
+        'fcm_token': fcmToken.trim(),
+      },
+      logLabel: 'UPDATE_FCM',
+    );
 
+    return AuthResponse.fromJson(json);
+  }
+
+  // ── DEVICE ─────────────────────────────────────────────────────────────────
+  Future<String> getOrCreateDeviceId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final existing = prefs.getString(_installationDeviceIdKey)?.trim() ?? '';
+
+    if (existing.isNotEmpty) return existing;
+
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    final newDeviceId = 'MA-$timestamp';
+    await prefs.setString(_installationDeviceIdKey, newDeviceId);
     return newDeviceId;
   }
 
-  Future<AuthResponse> updateFcmToken({
-    required String bprId,
-    required String noCif,
-    required String username,
-    required String fcmToken,
-    String? deviceId,
-    String? sessionToken,
+  // ── SESSION CHECK / LOGOUT ─────────────────────────────────────────────────
+  Future<Map<String, dynamic>> checkSessionTimeout({
+    bool extendSession = false,
   }) async {
-    final payload = {
-      'bpr_id': bprId,
-      'no_cif': noCif.trim(),
-      'username': username.trim().toUpperCase(),
-      'fcm_token': fcmToken.trim(),
-      if ((deviceId ?? '').trim().isNotEmpty) 'device_id': deviceId!.trim(),
-      if ((sessionToken ?? '').trim().isNotEmpty) 'session_token': sessionToken!.trim(),
-    };
-
-    debugPrint('🔥 UPDATE FCM URL: ${NetworkUrl.updateFcmToken()}');
-    debugPrint('🔥 UPDATE FCM PAYLOAD: ${jsonEncode(payload)}');
-
-    final response = await http.post(
-      Uri.parse(NetworkUrl.updateFcmToken()),
-      headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey},
-      body: jsonEncode(payload),
-    ).timeout(_httpTimeout);
-
-    return AuthResponse.fromJson(jsonDecode(response.body));
-  }
-
-  // ── LOGOUT ─────────────────────────────────────────────────────────────────
-  Future<AuthResponse> logout({required String bprId, required String userId}) async {
-    // Tambahan: logout session di medfo-go agar is_login menjadi N,
-    // tetapi device binding tetap disimpan di backend.
-    // Flow logout lama di bawah tetap dipertahankan.
-    try {
-      await logoutAgentSession();
-    } catch (e) {
-      debugPrint('⚠️ logoutAgentSession gagal: $e');
-    }
-
-    try {
-      final response = await TokenInterceptor.post(Uri.parse(NetworkUrl.logout()), body: jsonEncode({'bpr_id': bprId, 'user_id': userId}));
-
-      final result = AuthResponse.fromJson(jsonDecode(response.body));
-      await clearSession();
-      return result;
-    } catch (_) {
-      await clearSession();
-      return const AuthResponse(code: '000', status: 'success', message: 'Logout berhasil');
-    }
-  }
-
-  Future<void> logoutLegacySilently({required String bprId, required String userId}) async {
-    try {
-      await TokenInterceptor.post(
-        Uri.parse(NetworkUrl.logout()),
-        body: jsonEncode({'bpr_id': bprId, 'user_id': userId}),
-      );
-    } catch (e) {
-      debugPrint('⚠️ logoutLegacySilently gagal: $e');
-    }
-  }
-
-  Future<AuthResponse> logoutAgentSession() async {
-    final session = await getSessionData();
-
-    final payload = {
-      'bpr_id': session['bpr_id'] ?? '',
-      'username': (session['user_id'] ?? '').toString().toUpperCase(),
-      'no_cif': session['no_cif'] ?? '',
-      'device_id': session['device_id'] ?? '',
-      'session_token': session['session_token'] ?? '',
-    };
-
-    debugPrint('🚪 SESSION LOGOUT URL: ${NetworkUrl.sessionLogout()}');
-    debugPrint('🚪 SESSION LOGOUT BODY: ${jsonEncode(payload)}');
-
-    final response = await http.post(
-      Uri.parse(NetworkUrl.sessionLogout()),
-      headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
-      body: jsonEncode(payload),
-    ).timeout(_httpTimeout);
-
-    debugPrint('🚪 SESSION LOGOUT STATUS: ${response.statusCode}');
-    debugPrint('🚪 SESSION LOGOUT RESPONSE: ${response.body}');
-
-    return AuthResponse.fromJson(jsonDecode(response.body));
-  }
-
-  Future<Map<String, dynamic>> checkSessionTimeout({bool extendSession = false}) async {
     try {
       final session = await getSessionData();
+      final deviceId = session['device_id'] ?? '';
+      final sessionToken = session['session_token'] ?? '';
 
-      final bprId = session['bpr_id']?.toString() ?? '';
-      final userId = session['user_id']?.toString() ?? '';
-      final username = session['username']?.toString() ?? session['user_login']?.toString() ?? userId;
-
-      final deviceId = session['device_id']?.toString() ?? session['login_device_id']?.toString() ?? '';
-
-      final sessionToken = session['session_token']?.toString() ?? session['login_session_token']?.toString() ?? session['token']?.toString() ?? '';
-
-      if (bprId.isEmpty || username.isEmpty || deviceId.isEmpty || sessionToken.isEmpty) {
+      if (deviceId.isEmpty || sessionToken.isEmpty) {
         return {
           'success': false,
           'should_logout': true,
@@ -366,91 +387,73 @@ class AuthService {
         };
       }
 
-      final payload = {
-        'user_id': 0,
-        'username': username,
-        'bpr_id': bprId,
-        'device_id': deviceId,
-        'session_token': sessionToken,
-        'extend_session': extendSession,
-      };
-
-      debugPrint('🧭 SESSION CHECK URL: ${NetworkUrl.sessionCheck()}');
-      debugPrint('🧭 SESSION CHECK BODY: ${jsonEncode(payload)}');
-
-      final response = await http.post(
-        Uri.parse(NetworkUrl.sessionCheck()),
-        headers: {
-          'Content-Type': 'application/json',
-          'api-key': NetworkUrl.apiKey,
-          'X-API-Key': NetworkUrl.apiKey,
-          'API-Key': NetworkUrl.apiKey,
+      final json = await _postJson(
+        NetworkUrl.sessionCheck(),
+        {
+          'device_id': deviceId,
+          'session_token': sessionToken,
+          'extend_session': extendSession,
         },
-        body: jsonEncode(payload),
-      ).timeout(_httpTimeout);
+        logLabel: 'SESSION_CHECK',
+      );
 
-      debugPrint('🧭 SESSION CHECK STATUS: ${response.statusCode}');
-      debugPrint('🧭 SESSION CHECK RESPONSE: ${response.body}');
-
-      if (response.statusCode != 200) {
-        return {'success': false, 'should_logout': false, 'message': 'HTTP ${response.statusCode}', 'reason': 'HTTP_ERROR'};
-      }
-
-      final jsonData = jsonDecode(response.body);
-      final data = jsonData['data'];
-
-      final code = jsonData['code']?.toString() ?? '';
-      final shouldLogout = data is Map ? data['should_logout'] == true : code == '401';
+      final code = json['code']?.toString() ?? '';
+      final rawData = json['data'];
+      final data = rawData is Map
+          ? Map<String, dynamic>.from(rawData)
+          : <String, dynamic>{};
 
       return {
         'success': code == '000',
-        'should_logout': shouldLogout,
-        'message': jsonData['message']?.toString() ?? '',
-        'reason': data is Map ? data['reason']?.toString() ?? '' : '',
+        'should_logout':
+            data['should_logout'] == true || code == '401' || code == '410',
+        'message': json['message']?.toString() ?? '',
+        'reason': data['reason']?.toString() ?? '',
         'data': data,
       };
     } catch (e) {
-      debugPrint('❌ checkSessionTimeout error: $e');
-
-      return {'success': false, 'should_logout': false, 'message': 'Gagal mengecek session: $e', 'reason': 'EXCEPTION'};
+      debugPrint('SESSION_CHECK exception: $e');
+      return {
+        'success': false,
+        'should_logout': false,
+        'message': 'Gagal mengecek session.',
+        'reason': 'EXCEPTION',
+      };
     }
   }
 
   Future<AuthResponse> logoutCurrentSession() async {
     final session = await getSessionData();
+    final deviceId = session['device_id'] ?? '';
+    final sessionToken = session['session_token'] ?? '';
 
-    final bprId = session['bpr_id']?.toString() ?? '';
-    final userId = session['user_id']?.toString() ?? session['username']?.toString() ?? session['user_login']?.toString() ?? '';
-
-    if (bprId.isEmpty || userId.isEmpty) {
+    if (deviceId.isEmpty || sessionToken.isEmpty) {
       await clearSession();
-
-      return const AuthResponse(code: '000', status: 'success', message: 'Session lokal dibersihkan');
+      return const AuthResponse(
+        code: '000',
+        status: 'success',
+        message: 'Session lokal dibersihkan.',
+      );
     }
 
-    final result = await logout(bprId: bprId, userId: userId);
-
-    await clearSession();
-
-    return result;
+    try {
+      final json = await _postJson(
+        NetworkUrl.sessionLogout(),
+        {
+          'device_id': deviceId,
+          'session_token': sessionToken,
+        },
+        logLabel: 'SESSION_LOGOUT',
+      );
+      return AuthResponse.fromJson(json);
+    } finally {
+      await clearSession();
+    }
   }
 
-  // ── GANTI PASSWORD ─────────────────────────────────────────────────────────
-  Future<AuthResponse> changePassword({
-    required String bprId,
-    required String userId,
-    required String oldPassword,
-    required String newPassword,
-  }) async {
-    final response = await TokenInterceptor.post(
-      Uri.parse(NetworkUrl.changePassword()),
-      body: jsonEncode({'bpr_id': bprId, 'user_id': userId, 'old_password': oldPassword, 'new_password': newPassword}),
-    );
+  Future<AuthResponse> logout() => logoutCurrentSession();
 
-    return AuthResponse.fromJson(jsonDecode(response.body));
-  }
-
-  // ── SESSION ────────────────────────────────────────────────────────────────
+  // ── LOCAL SESSION ──────────────────────────────────────────────────────────
   Future<void> _saveSession({
     required String token,
     required String userId,
@@ -473,8 +476,6 @@ class AuthService {
     await prefs.setString(_sessionTokenKey, sessionToken);
     await prefs.setString(_roleUserKey, roleUser);
     await prefs.setString(_jabatanKey, jabatan);
-
-    debugPrint('✅ SESSION SAVED: user_id=$userId, role_user=$roleUser, jabatan=$jabatan');
   }
 
   Future<void> clearSession() async {
@@ -489,6 +490,9 @@ class AuthService {
     await prefs.remove(_sessionTokenKey);
     await prefs.remove(_roleUserKey);
     await prefs.remove(_jabatanKey);
+
+    // mobile_agent_device_id sengaja tidak dihapus karena merupakan binding
+    // instalasi, bukan session login.
   }
 
   Future<String?> getToken() async {
@@ -513,65 +517,151 @@ class AuthService {
     };
   }
 
-  Future<Map<String, dynamic>> startSession({
+  // ── HELPERS ────────────────────────────────────────────────────────────────
+  AuthResponse? _validateIdentity({
     required String bprId,
     required String username,
-    required String noCif,
-    required String deviceId,
-    required String deviceName,
-    required String sessionToken,
-    required String roleUser,
-    required String jabatan,
+    required String phone,
+  }) {
+    if (bprId.trim().isEmpty) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'BPR wajib dipilih.',
+      );
+    }
+    if (username.trim().isEmpty) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Username wajib diisi.',
+      );
+    }
+    if (phone.trim().isEmpty) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Nomor HP wajib diisi.',
+      );
+    }
+    return null;
+  }
+
+  AuthResponse? _validateNewPassword(
+    String newPassword,
+    String confirmPassword, {
+    String? oldPassword,
+  }) {
+    if (newPassword.isEmpty || confirmPassword.isEmpty) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Password baru dan konfirmasi wajib diisi.',
+      );
+    }
+    if (newPassword.length < 8) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Password baru minimal 8 karakter.',
+      );
+    }
+    if (newPassword.length > 128) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Password baru maksimal 128 karakter.',
+      );
+    }
+    if (newPassword != confirmPassword) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Password baru dan konfirmasi tidak sama.',
+      );
+    }
+    if (oldPassword != null && newPassword == oldPassword) {
+      return const AuthResponse(
+        code: '001',
+        status: 'error',
+        message: 'Password baru tidak boleh sama dengan password lama.',
+      );
+    }
+    return null;
+  }
+
+  Future<Map<String, dynamic>> _postJson(
+    String url,
+    Map<String, dynamic> body, {
+    required String logLabel,
   }) async {
     try {
-      final normalizedBprId = bprId.trim();
+      debugPrint('[$logLabel] POST $url');
 
-      if (normalizedBprId.isEmpty) {
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: NetworkUrl.jsonHeaders(),
+            body: jsonEncode(body),
+          )
+          .timeout(_requestTimeout);
+
+      debugPrint('[$logLabel] HTTP ${response.statusCode}');
+
+      if (response.body.trim().isEmpty) {
         return {
-          'success': false,
-          'code': '001',
-          'message': 'BPR ID wajib diisi untuk memulai session.',
-          'data': {
-            'reason': 'BPR_ID_REQUIRED',
-          },
+          'code': 'HTTP_${response.statusCode}',
+          'status': 'error',
+          'message': 'Server tidak memberikan response.',
+          'data': null,
         };
       }
 
-      final payload = {
-        'bpr_id': normalizedBprId,
-        'username': username.trim().toUpperCase(),
-        'no_cif': noCif.trim(),
-        'device_id': deviceId.trim(),
-        'device_name': deviceName.trim(),
-        'session_token': sessionToken.trim(),
-        'role_user': roleUser.trim(),
-        'jabatan': jabatan.trim(),
-      };
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) {
+        return {
+          'code': 'INVALID_RESPONSE',
+          'status': 'error',
+          'message': 'Format response server tidak valid.',
+          'data': null,
+        };
+      }
 
-      debugPrint('🚀 SESSION START URL: ${NetworkUrl.sessionStart()}');
-      debugPrint('🚀 SESSION START BODY: ${jsonEncode(payload)}');
-
-      final response = await http.post(
-        Uri.parse(NetworkUrl.sessionStart()),
-        headers: {'Content-Type': 'application/json', 'api-key': NetworkUrl.apiKey, 'X-API-Key': NetworkUrl.apiKey, 'API-Key': NetworkUrl.apiKey},
-        body: jsonEncode(payload),
-      ).timeout(_httpTimeout);
-
-      debugPrint('🚀 SESSION START STATUS: ${response.statusCode}');
-      debugPrint('🚀 SESSION START RESPONSE: ${response.body}');
-
-      final jsonData = jsonDecode(response.body);
-
+      final result = Map<String, dynamic>.from(decoded);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        result.putIfAbsent(
+          'code',
+          () => 'HTTP_${response.statusCode}',
+        );
+        result.putIfAbsent('status', () => 'error');
+        result.putIfAbsent(
+          'message',
+          () => 'Request gagal. HTTP ${response.statusCode}',
+        );
+      }
+      return result;
+    } on TimeoutException {
       return {
-        'success': response.statusCode == 200 && jsonData['code']?.toString() == '000',
-        'code': jsonData['code']?.toString() ?? '',
-        'message': jsonData['message']?.toString() ?? '',
-        'data': jsonData['data'],
+        'code': 'TIMEOUT',
+        'status': 'error',
+        'message': 'Waktu koneksi habis. Silakan coba kembali.',
+        'data': null,
+      };
+    } on FormatException {
+      return {
+        'code': 'INVALID_RESPONSE',
+        'status': 'error',
+        'message': 'Response server tidak dapat dibaca.',
+        'data': null,
       };
     } catch (e) {
-      debugPrint('❌ startSession error: $e');
-
-      return {'success': false, 'code': 'EXCEPTION', 'message': 'Gagal memulai session: $e', 'data': null};
+      debugPrint('[$logLabel] ERROR: $e');
+      return {
+        'code': 'CONNECTION_ERROR',
+        'status': 'error',
+        'message': 'Gagal terhubung ke server. Periksa koneksi Anda.',
+        'data': null,
+      };
     }
   }
 }
