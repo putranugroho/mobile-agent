@@ -131,7 +131,6 @@ class _BprPickerFieldState extends State<BprPickerField> {
       child: InputDecorator(
         isEmpty: _selected == null,
         decoration: InputDecoration(
-          hintText: _loading ? 'Memuat daftar BPR...' : 'Pilih nama BPR',
           prefixIcon: const Icon(Icons.account_balance, size: 20),
           suffixIcon: suffix,
           errorText: _error,
