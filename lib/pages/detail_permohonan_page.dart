@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/permohonan_pinjaman_model.dart';
 import '../notifiers/permohonan_pinjaman_notifier.dart';
+import '../repositories/permohonan_pinjaman_repository.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../theme/app_typography.dart';
@@ -52,12 +53,25 @@ class _DetailPermohonanPageState extends State<DetailPermohonanPage> {
   late DateTime tanggalPengajuan;
   late DateTime today;
 
+  // Pejabat cuma boleh MELIHAT pengajuan, tombol Setuju/Tolak dibatasi
+  // untuk petugas (role_user='2') -- aturan yang sama dengan CMS Medfo.
+  // Default false (anggap petugas) sampai hasil pengecekan role selesai
+  // dimuat, supaya tombol tidak "berkedip" muncul dulu baru hilang.
+  bool _isPejabat = false;
+
   @override
   void initState() {
     super.initState();
     tanggalPengajuan = _parseDateOnly(widget.data.tglinput);
     today = DateTime.now();
     selectedDate = today;
+    _loadRole();
+  }
+
+  Future<void> _loadRole() async {
+    final isPejabat = await PengajuanRepository().isPejabat();
+    if (!mounted) return;
+    setState(() => _isPejabat = isPejabat);
   }
 
   @override
@@ -113,7 +127,37 @@ class _DetailPermohonanPageState extends State<DetailPermohonanPage> {
 
             _buildTanggalKeputusan(isProcessed),
 
-            if (!isProcessed) ...[
+            // TOMBOL SETUJU/TOLAK HANYA UNTUK PETUGAS -- PEJABAT TIDAK BISA
+            // eksekusi langsung, sama seperti aturan di CMS Medfo. Pejabat
+            // cuma boleh melihat status pengajuan; keputusan tetap wewenang
+            // petugas (role_user='2') yang ditugaskan.
+            if (!isProcessed && _isPejabat) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceAlt,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: Border.all(color: AppColors.brand300, width: 1.2),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.visibility_outlined, size: 18, color: AppColors.brand700),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Anda login sebagai Pejabat -- hanya bisa memantau pengajuan ini. Keputusan Setuju/Tolak dilakukan oleh petugas yang ditugaskan.',
+                        style: AppText.bodyStyle(size: 12, weight: FontWeight.w500, color: AppColors.inkSoft),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+
+            if (!isProcessed && !_isPejabat) ...[
               const SizedBox(height: 4),
               Row(
                 children: [

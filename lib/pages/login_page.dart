@@ -358,7 +358,7 @@ class _LoginPageState extends State<LoginPage> {
                 Image.asset('assets/Logo_MTD_lurus.png', height: 40),
                 const SizedBox(height: 10),
                 Text(
-                  'Versi 1.0.4',
+                  'Versi 1.0.6',
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.grey.shade400,

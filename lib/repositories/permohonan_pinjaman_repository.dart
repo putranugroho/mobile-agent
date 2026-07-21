@@ -19,6 +19,17 @@ class PengajuanRepository {
     return prefs.getString('role_user') ?? '';
   }
 
+  /// Apakah user yang sedang login berperan sebagai Pejabat (role_user='1').
+  /// Dipakai untuk membatasi aksi Setuju/Tolak -- SAMA seperti aturan di
+  /// CMS Medfo (lihat komentar "TOMBOL HANYA UNTUK PETUGAS, PEJABAT TIDAK
+  /// BISA" di permohonan_pinjaman_page.dart): Pejabat cuma boleh MELIHAT
+  /// semua pengajuan, keputusan Setuju/Tolak tetap wewenang petugas
+  /// (role_user='2') yang ditugaskan.
+  Future<bool> isPejabat() async {
+    final role = await _getRoleUser();
+    return role.trim() == '1';
+  }
+
   Future<String> _getUserHandleForInquiry() async {
     final userHandle = await _getUserHandle();
     final roleUser = await _getRoleUser();
@@ -229,7 +240,7 @@ class PengajuanRepository {
       switch (status) {
         case '2':
           title = "Permohonan Pinjaman Disetujui";
-          body = "Selamat $nama, permohonan pinjaman Anda sebesar Rp $nilaiPinjaman telah DISETUJUI. Silakan menunggu informasi selanjutnya dari petugas kami.";
+          body = "Selamat $nama, permohonan pinjaman Anda sebesar Rp $nilaiPinjaman dapat DIPROSES. Silakan menunggu informasi selanjutnya dari petugas kami.";
           break;
         case '3':
           title = "Permohonan Pinjaman Ditolak";
