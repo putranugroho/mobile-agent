@@ -361,6 +361,9 @@ class _DetailPermohonanPageState extends State<DetailPermohonanPage> {
                 status: status,
                 alasan: status == '2' ? 'keputusan sesuai hasil evaluasi' : 'Tidak ada alasan',
                 tglKeputusan: _formatDateOnly(selectedDate),
+                noCif: widget.data.noCif,
+                nama: widget.data.nama,
+                nilaiPinjaman: widget.data.nilaiPinjaman,
               );
 
               // PENTING: pakai `mounted`/`context` milik State halaman ini,

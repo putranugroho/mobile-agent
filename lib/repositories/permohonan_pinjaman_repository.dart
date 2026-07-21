@@ -1,5 +1,6 @@
 // lib/repositories/permohonan_pinjaman_repository.dart
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../network/network.dart';
@@ -162,6 +163,9 @@ class PengajuanRepository {
     required String status,
     required String alasan,
     required String tglKeputusan,
+    String noCif = '',
+    String nama = '',
+    String nilaiPinjaman = '',
   }) async {
     try {
       final bprId = await _getBprId();
@@ -181,13 +185,80 @@ class PengajuanRepository {
 
       final response = await TokenInterceptor.post(Uri.parse(NetworkUrl.updateStatus()), body: jsonEncode(requestBody));
 
-      if (response.statusCode == 200) {
-        final jsonData = jsonDecode(response.body);
-        return jsonData['code'] == '000';
+      if (response.statusCode != 200) return false;
+      final jsonData = jsonDecode(response.body);
+      final success = jsonData['code'] == '000';
+
+      // Update status di atas SUDAH SELESAI (berhasil/gagal) pada titik
+      // ini. Kirim notif ke nasabah SEBAGAI LANGKAH TERPISAH, bukan bagian
+      // dari sukses/gagalnya updateStatus -- kalau notif gagal, itu TIDAK
+      // BOLEH bikin admin/petugas mengira update status-nya sendiri gagal
+      // (padahal sudah berhasil di server), sama seperti pola yang sudah
+      // diterapkan di CMS & mobile-info untuk kasus serupa.
+      if (success && noCif.trim().isNotEmpty) {
+        await _notifyNasabah(bprId: bprId, noCif: noCif, status: status, nama: nama, nilaiPinjaman: nilaiPinjaman);
       }
-      return false;
+
+      return success;
     } catch (e) {
       return false;
+    }
+  }
+
+  /// Kirim notif ke nasabah saat petugas memproses pengajuan lewat
+  /// mobile-agent -- judul & isi pesan disamakan PERSIS dengan
+  /// notifyBorrower di CMS Medfo (permohonan_pinjaman_repository.dart),
+  /// supaya nasabah menerima pesan yang konsisten dari mana pun
+  /// pengajuannya diproses. Sebelumnya updateStatus() di sini TIDAK
+  /// mengirim notif sama sekali -- nasabah cuma diberi tahu kalau
+  /// pengajuannya diproses lewat CMS, tidak kalau diproses langsung oleh
+  /// petugas di lapangan lewat mobile-agent.
+  ///
+  /// Fire-and-forget: kegagalan di sini TIDAK dilempar sebagai exception
+  /// ke pemanggil (lihat updateStatus di atas).
+  Future<void> _notifyNasabah({
+    required String bprId,
+    required String noCif,
+    required String status,
+    required String nama,
+    required String nilaiPinjaman,
+  }) async {
+    try {
+      String title;
+      String body;
+      switch (status) {
+        case '2':
+          title = "Permohonan Pinjaman Disetujui";
+          body = "Selamat $nama, permohonan pinjaman Anda sebesar Rp $nilaiPinjaman telah DISETUJUI. Silakan menunggu informasi selanjutnya dari petugas kami.";
+          break;
+        case '3':
+          title = "Permohonan Pinjaman Ditolak";
+          body = "Mohon maaf $nama, permohonan pinjaman Anda sebesar Rp $nilaiPinjaman belum dapat kami setujui. Silakan hubungi petugas kami untuk informasi lebih lanjut.";
+          break;
+        default:
+          title = "Update Permohonan Pinjaman";
+          body = "Halo $nama, status permohonan pinjaman Anda telah diperbarui.";
+      }
+
+      final payload = {
+        "bpr_id": bprId,
+        "no_cif": noCif,
+        "title": title,
+        "body": body,
+      };
+
+      final response = await TokenInterceptor.post(Uri.parse(NetworkUrl.pushNotif()), body: jsonEncode(payload));
+
+      if (response.statusCode != 200) {
+        debugPrint('⚠️ Notif ke nasabah (CIF=$noCif) gagal: HTTP ${response.statusCode}');
+        return;
+      }
+      final jsonData = jsonDecode(response.body);
+      if (jsonData['code'] != '000') {
+        debugPrint('⚠️ Notif ke nasabah (CIF=$noCif) ditolak backend: ${jsonData['message']}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Notif ke nasabah (CIF=$noCif) exception: $e');
     }
   }
 }

@@ -73,6 +73,12 @@ class NetworkUrl {
       '$baseAuthUrl/permohonan-pinjaman/update-status';
   static String getJaminan() =>
       '$baseUrl/inquiry/jaminan-by-kd-jaminan';
+
+  /// Kirim push notif ke nasabah -- endpoint & host SAMA PERSIS dengan yang
+  /// dipakai CMS Medfo (pushNotifPinjaman() di network.dart CMS), supaya
+  /// nasabah tetap dapat notifikasi walau petugas memproses pengajuan lewat
+  /// mobile-agent (bukan lewat CMS).
+  static String pushNotif() => '$baseUrl/mobile-agent/push-notif';
   static String getJaminanAll() => '$baseUrl/inquiry/jaminan-all';
 
   // BPR Profile

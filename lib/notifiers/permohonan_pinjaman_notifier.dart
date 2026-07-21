@@ -103,11 +103,23 @@ class PengajuanNotifier extends ChangeNotifier {
     required String status,
     required String alasan,
     required String tglKeputusan,
+    String noCif = '',
+    String nama = '',
+    String nilaiPinjaman = '',
   }) async {
     _isUpdating = true;
     notifyListeners();
 
-    final success = await _repository.updateStatus(noId: noId, noHp: noHp, status: status, alasan: alasan, tglKeputusan: tglKeputusan);
+    final success = await _repository.updateStatus(
+      noId: noId,
+      noHp: noHp,
+      status: status,
+      alasan: alasan,
+      tglKeputusan: tglKeputusan,
+      noCif: noCif,
+      nama: nama,
+      nilaiPinjaman: nilaiPinjaman,
+    );
 
     if (success) {
       await loadPengajuan();
