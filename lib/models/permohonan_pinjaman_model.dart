@@ -17,6 +17,7 @@ class PengajuanModel {
   final String userHandle;
   final String alasan;
   final String fhotojaminan;
+  final String kdKantor;
 
   PengajuanModel({
     required this.noCif,
@@ -36,6 +37,7 @@ class PengajuanModel {
     required this.userHandle,
     required this.alasan,
     this.fhotojaminan = '',
+    this.kdKantor = '',
   });
 
   factory PengajuanModel.fromJson(Map<String, dynamic> json) {
@@ -68,6 +70,7 @@ class PengajuanModel {
       userHandle: json['user_handle']?.toString() ?? '',
       alasan: json['alasan']?.toString() ?? '',
       fhotojaminan: json['fhoto_jaminan']?.toString() ?? '',
+      kdKantor: json['kd_kantor']?.toString() ?? json['kdKantor']?.toString() ?? '',
     );
   }
 }

@@ -34,7 +34,7 @@ class PengajuanRepository {
     final userHandle = await _getUserHandle();
     final roleUser = await _getRoleUser();
 
-    // role_user 1 = pejabat, lihat semua permohonan
+    // role_user 1 = pejabat, lihat permohonan di kantor yang sama (filter kd_kantor)
     if (roleUser == '1') {
       return '';
     }
@@ -59,6 +59,33 @@ class PengajuanRepository {
     }
 
     return bprId;
+  }
+
+  Future<String> _getKdKantor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('kd_kantor')?.trim() ?? '';
+  }
+
+  /// Hanya tampilkan permohonan yang kd_kantor-nya sama dengan petugas/pejabat
+  /// yang sedang login (mis. permohonan 001 ↔ agent 001).
+  bool _permohonanMatchesSessionKantor(PengajuanModel item, String sessionKdKantor) {
+    final kantorSession = sessionKdKantor.trim();
+    if (kantorSession.isEmpty) {
+      if (kDebugMode) {
+        debugPrint(
+          '⚠️ kd_kantor session agent kosong — permohonan tidak ditampilkan. Silakan login ulang.',
+        );
+      }
+      return false;
+    }
+    return item.kdKantor.trim() == kantorSession;
+  }
+
+  List<PengajuanModel> _filterBySessionKantor(
+    List<PengajuanModel> items,
+    String sessionKdKantor,
+  ) {
+    return items.where((item) => _permohonanMatchesSessionKantor(item, sessionKdKantor)).toList();
   }
 
   Future<List<PengajuanModel>> _getAllPengajuan() async {
@@ -87,7 +114,9 @@ class PengajuanRepository {
         final jsonData = jsonDecode(response.body);
         if (jsonData['code'] == '000') {
           final List<dynamic> dataList = jsonData['data']?['data'] ?? [];
-          return dataList.map((item) => PengajuanModel.fromJson(item)).toList();
+          final sessionKdKantor = await _getKdKantor();
+          final parsed = dataList.map((item) => PengajuanModel.fromJson(item)).toList();
+          return _filterBySessionKantor(parsed, sessionKdKantor);
         } else {
           throw Exception(jsonData['message'] ?? 'Gagal memuat data');
         }

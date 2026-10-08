@@ -2,8 +2,11 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../services/holiday_service.dart';
+import '../utils/hari_libur_exception.dart';
 import '../widgets/brand_logo.dart';
 import 'aktivasi_page.dart';
+import 'hari_libur_page.dart';
 import 'lupa_password_page.dart';
 import 'main_menu_page.dart';
 
@@ -63,6 +66,39 @@ class _LoginPageState extends State<LoginPage> {
           'Login berhasil, tetapi data session tidak lengkap. Silakan login kembali.',
         );
         return;
+      }
+
+      // ==================== CEK HARI LIBUR ====================
+      // Login (username/password) sudah BERHASIL di titik ini. Kalau hari
+      // ini hari libur (nasional/cuti bersama/khusus BPR ini, atau hari
+      // libur mingguan dari jam kerja) dan bpr_id-nya bukan salah satu
+      // pengecualian (mis. 609999), sesi yang baru terbentuk langsung
+      // di-clear (termasuk logout ke server) dan diarahkan ke halaman
+      // Hari Libur — bukan cuma dihalangi tampilannya doang.
+      if (!isHariLiburExempt(bprId)) {
+        String? keterangan = (await HolidayService.checkHariLibur(bprId: bprId))?.keterangan;
+
+        if (keterangan == null) {
+          final jamLibur = await HolidayService.checkJamKerjaLibur(bprId: bprId);
+          if (jamLibur != null) {
+            keterangan = 'Hari ${jamLibur.hariNama}';
+          }
+        }
+
+        if (keterangan != null) {
+          try {
+            await _authService.logoutCurrentSession();
+          } catch (_) {
+            await _authService.clearSession();
+          }
+          if (!mounted) return;
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => HariLiburPage(keterangan: keterangan)),
+            (route) => false,
+          );
+          return;
+        }
       }
 
       if (!mounted) return;

@@ -20,6 +20,7 @@ class AuthService {
   static const String _noCifKey = 'no_cif';
   static const String _roleUserKey = 'role_user';
   static const String _jabatanKey = 'jabatan';
+  static const String _kdKantorKey = 'kd_kantor';
   static const String _installationDeviceIdKey =
       'mobile_agent_device_id';
 
@@ -96,6 +97,7 @@ class AuthService {
       noCif: user.noCif.isEmpty ? user.userId : user.noCif,
       nama: user.nama.isEmpty ? user.userId : user.nama,
       bprId: user.bprId,
+      kdKantor: user.kdKantor,
       deviceId: deviceId,
       sessionToken: sessionToken,
       roleUser: user.roleUser ?? '',
@@ -460,6 +462,7 @@ class AuthService {
     required String noCif,
     required String nama,
     required String bprId,
+    required String kdKantor,
     required String deviceId,
     required String sessionToken,
     required String roleUser,
@@ -472,6 +475,7 @@ class AuthService {
     await prefs.setString(_noCifKey, noCif);
     await prefs.setString(_namaKey, nama);
     await prefs.setString(_bprIdKey, bprId);
+    await prefs.setString(_kdKantorKey, kdKantor.trim());
     await prefs.setString(_deviceIdKey, deviceId);
     await prefs.setString(_sessionTokenKey, sessionToken);
     await prefs.setString(_roleUserKey, roleUser);
@@ -490,6 +494,7 @@ class AuthService {
     await prefs.remove(_sessionTokenKey);
     await prefs.remove(_roleUserKey);
     await prefs.remove(_jabatanKey);
+    await prefs.remove(_kdKantorKey);
 
     // mobile_agent_device_id sengaja tidak dihapus karena merupakan binding
     // instalasi, bukan session login.
@@ -514,6 +519,7 @@ class AuthService {
       'device_id': prefs.getString(_deviceIdKey) ?? '',
       'role_user': prefs.getString(_roleUserKey) ?? '',
       'jabatan': prefs.getString(_jabatanKey) ?? '',
+      'kd_kantor': prefs.getString(_kdKantorKey) ?? '',
     };
   }
 
